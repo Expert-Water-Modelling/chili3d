@@ -6,7 +6,6 @@ import { IDocument } from "../document";
 import { I18nKeys } from "../i18n";
 import { Material } from "../material";
 import { INode } from "../model";
-import { ObjectSnapType } from "../snapType";
 import { CursorType, IView } from "../visual";
 import { AsyncController } from "./asyncController";
 import { IDisposable } from "./disposable";
@@ -30,6 +29,7 @@ export interface PubSubEventMap {
     openCommandContext: (command: ICommand) => void;
     parentVisibleChanged: (model: INode) => void;
     selectionChanged: (document: IDocument, selected: INode[], unselected: INode[]) => void;
+    showBoundaryCondition: (document: IDocument, node: INode) => void;
     showDialog: (title: I18nKeys, context: IPropertyChanged, callback: () => void) => void;
     showFloatTip: (level: MessageType, msg: string) => void;
     showInput: (text: string, handler: (text: string) => Result<string, I18nKeys>) => void;

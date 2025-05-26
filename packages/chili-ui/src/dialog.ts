@@ -16,7 +16,7 @@ export class Dialog {
         dialog.appendChild(
             div(
                 { className: style.root },
-                div({ className: style.title }, I18n.translate(title) ?? "chili3d"),
+                div({ className: style.title }, I18n.translate(title)),
                 ...Property.getProperties(context).map((x) => {
                     const value = (context as any)[x.name];
                     if (value instanceof SelectableItems) {

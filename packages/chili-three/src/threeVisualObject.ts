@@ -70,6 +70,7 @@ export class ThreeVisualObject extends Object3D implements IVisualObject {
 export class ThreeMeshObject extends ThreeVisualObject {
     private _mesh: LineSegments2 | Mesh | Line2;
     private material: Material | Material[];
+    private selectedFolderId: string | null = null;
 
     get mesh() {
         return this._mesh;
@@ -92,6 +93,7 @@ export class ThreeMeshObject extends ThreeVisualObject {
                 this._mesh.material = HighlightFaceMaterial;
             } else {
                 this._mesh.material = this.material;
+                this.selectedFolderId = null;
             }
         }
 

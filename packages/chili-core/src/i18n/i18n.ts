@@ -28,7 +28,7 @@ export namespace I18n {
         ["zh-CN", zh],
     ]);
 
-    let _currentLanguage: LanguageCode = "zh-CN";
+    let _currentLanguage: LanguageCode = "en";
 
     export function currentLanguage() {
         return _currentLanguage;

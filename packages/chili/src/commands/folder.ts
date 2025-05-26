@@ -6,14 +6,16 @@ import { command, FolderNode, IApplication, ICommand } from "chili-core";
 let index = 1;
 
 @command({
-    name: "create.folder",
-    display: "command.newFolder",
+    name: "create.boundary",
+    display: "command.newBoundary",
     icon: "icon-folder-plus",
 })
-export class NewFolder implements ICommand {
+export class NewBoundary implements ICommand {
     async execute(app: IApplication): Promise<void> {
         const document = app.activeView?.document!;
-        const folder = new FolderNode(document, `Folder${index++}`);
-        document.addNode(folder);
+        const boundary = new FolderNode(document, `Boundary${index++}`);
+        document.addNode(boundary);
+        // Initialize boundary type as wall by default
+        document.boundaryTypes.set(boundary.id, "wall");
     }
 }

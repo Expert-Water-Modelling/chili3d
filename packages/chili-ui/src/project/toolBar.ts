@@ -17,7 +17,7 @@ export class ToolBar extends HTMLElement {
 
     private render() {
         const buttons = [
-            { icon: "icon-folder-plus", tip: "items.tool.newFolder", command: this.newGroup },
+            { icon: "icon-folder-plus", tip: "items.tool.newBoundary", command: this.newBoundary },
             { icon: "icon-unexpand", tip: "items.tool.unexpandAll", command: this.unExpandAll },
             { icon: "icon-expand", tip: "items.tool.expandAll", command: this.expandAll },
         ];
@@ -37,8 +37,8 @@ export class ToolBar extends HTMLElement {
         );
     }
 
-    private readonly newGroup = () => {
-        PubSub.default.pub("executeCommand", "create.folder");
+    private readonly newBoundary = () => {
+        PubSub.default.pub("executeCommand", "create.boundary");
     };
 
     private readonly expandAll = () => {
@@ -56,16 +56,16 @@ export class ToolBar extends HTMLElement {
         if (first) this.setNodeExpand(tree, first, expand);
     }
 
-    private setNodeExpand(tree: Tree, list: INode, expand: boolean) {
-        let item = tree.treeItem(list);
+    private setNodeExpand(tree: Tree, node: INode, expand: boolean) {
+        let item = tree.treeItem(node);
         if (item instanceof TreeGroup) {
             item.isExpanded = expand;
         }
-        if (INode.isLinkedListNode(list) && list.firstChild) {
-            this.setNodeExpand(tree, list.firstChild, expand);
+        if (INode.isLinkedListNode(node) && node.firstChild) {
+            this.setNodeExpand(tree, node.firstChild, expand);
         }
-        if (list.nextSibling) {
-            this.setNodeExpand(tree, list.nextSibling, expand);
+        if (node.nextSibling) {
+            this.setNodeExpand(tree, node.nextSibling, expand);
         }
     }
 }

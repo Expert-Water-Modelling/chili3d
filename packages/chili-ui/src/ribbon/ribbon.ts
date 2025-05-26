@@ -120,11 +120,6 @@ export class Ribbon extends HTMLElement {
         return div(
             { className: style.left },
             div(
-                { className: style.appIcon, onclick: () => PubSub.default.pub("displayHome", true) },
-                svg({ className: style.icon, icon: "icon-chili" }),
-                span({ id: "appName", textContent: `Chili3D - v${__APP_VERSION__}` }),
-            ),
-            div(
                 { className: style.ribbonTitlePanel },
                 svg({
                     className: style.home,
@@ -163,12 +158,6 @@ export class Ribbon extends HTMLElement {
                 className: style.views,
                 sources: this.dataContent.app.views,
                 template: (view) => this.createViewItem(view),
-            }),
-            svg({
-                className: style.new,
-                icon: "icon-plus",
-                title: I18n.translate("command.document.new"),
-                onclick: () => PubSub.default.pub("executeCommand", "doc.new"),
             }),
         );
     }

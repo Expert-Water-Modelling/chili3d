@@ -2,6 +2,7 @@
 // See LICENSE file in the project root for full license information.
 
 import { Button, CommandKeys, I18nKeys, IApplication, RibbonTab } from "chili-core";
+import { BoundaryConditionView } from "./boundaryCondition/boundaryConditionView";
 import { div } from "./components";
 import style from "./editor.module.css";
 import { ProjectView } from "./project";
@@ -11,7 +12,14 @@ import { RibbonTabData } from "./ribbon/ribbonData";
 import { Statusbar } from "./statusbar";
 import { LayoutViewport } from "./viewport";
 
-let quickCommands: CommandKeys[] = ["doc.save", "doc.saveToFile", "edit.undo", "edit.redo"];
+let quickCommands: CommandKeys[] = [
+    "doc.save",
+    "doc.send",
+    "doc.reset",
+    "doc.saveToFile",
+    "edit.undo",
+    "edit.redo",
+];
 
 export class Editor extends HTMLElement {
     readonly ribbonContent: RibbonDataContent;
@@ -38,6 +46,7 @@ export class Editor extends HTMLElement {
                         { className: style.sidebar },
                         new ProjectView({ className: style.sidebarItem }),
                         new PropertyView({ className: style.sidebarItem }),
+                        new BoundaryConditionView({ className: style.sidebarItem }),
                     ),
                     viewport,
                 ),

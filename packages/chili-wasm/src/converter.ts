@@ -5,14 +5,15 @@ import {
     Deletable,
     EditableShapeNode,
     FolderNode,
+    gc,
     GroupNode,
     IDisposable,
     IDocument,
+    INode,
     IShape,
     IShapeConverter,
     Material,
     Result,
-    gc,
 } from "chili-core";
 import { ShapeNode } from "../lib/chili-wasm";
 import { OcctHelper } from "./helper";
@@ -97,7 +98,67 @@ export class OccShapeConverter implements IShapeConverter {
     }
 
     convertFromSTEP(document: IDocument, step: Uint8Array): Result<FolderNode> {
-        return this.converterFromData(document, step, wasm.Converter.convertFromStep);
+        const result = this.converterFromData(document, step, wasm.Converter.convertFromStep);
+        if (!result.isOk) {
+            return Result.err(result.error);
+        }
+
+        // Get the main folder
+        const mainFolder = result.value;
+
+        // Collect all faces and add them directly to the main folder
+        const collectFaces = (node: INode) => {
+            if (node instanceof EditableShapeNode && node.shape instanceof OccShape) {
+                // Get all sub-shapes (faces) from the geometry
+                const subShapes = node.shape.iterShape();
+                if (subShapes.length > 0) {
+                    // Add each face as a separate node directly to the main folder
+                    subShapes.forEach((subShape, index) => {
+                        const faceName = `Face_${index + 1}`;
+                        const faceNode = new EditableShapeNode(
+                            document,
+                            faceName,
+                            subShape,
+                            node.materialId,
+                        );
+                        mainFolder.add(faceNode);
+                    });
+                }
+            }
+
+            // If it's a folder node, traverse its children
+            if (node instanceof FolderNode) {
+                let child = node.firstChild;
+                while (child) {
+                    collectFaces(child);
+                    child = child.nextSibling;
+                }
+            }
+        };
+        collectFaces(mainFolder);
+
+        return Result.ok(mainFolder);
+    }
+
+    // New method to import STEP file and return a list of faces
+    convertFromSTEPToListFaces(document: IDocument, step: Uint8Array): Result<IShape[]> {
+        const result = this.convertFromSTEP(document, step);
+        if (!result.isOk) {
+            return Result.err(result.error);
+        }
+        const folder = result.value;
+        const faces: IShape[] = [];
+        // Recursively collect all EditableShapeNode instances from the folder
+        const collectFaces = (node: any) => {
+            if (node instanceof EditableShapeNode && node.shape instanceof OccShape) {
+                faces.push(node.shape);
+            }
+            if (node.children) {
+                node.children.forEach(collectFaces);
+            }
+        };
+        collectFaces(folder);
+        return Result.ok(faces);
     }
 
     convertToBrep(shape: IShape): Result<string> {

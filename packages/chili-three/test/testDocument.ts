@@ -30,6 +30,7 @@ export class TestDocument implements IDocument, ISerialize {
     rootNode: INodeLinkedList;
     activeView: IView | undefined;
     materials: ObservableCollection<Material> = new ObservableCollection<Material>();
+    readonly boundaryTypes: Map<string, string> = new Map();
     onPropertyChanged<K extends keyof this>(handler: PropertyChangedHandler<this, K>): void {
         throw new Error("Method not implemented.");
     }

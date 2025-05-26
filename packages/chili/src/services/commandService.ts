@@ -42,7 +42,15 @@ export class CommandService implements IService {
     private readonly executeCommand = async (commandName: CommandKeys) => {
         const command = commandName === "special.last" ? this._lastCommand : commandName;
         if (!command || !(await this.canExecute(command))) return;
+
         Logger.info(`executing command ${command}`);
+
+        // Only check for active view if it's not an application command
+        if (!ApplicationCommands.includes(command) && !this.app.activeView) {
+            Logger.error("No active view for command execution");
+            return;
+        }
+
         await this.executeAsync(command);
     };
 

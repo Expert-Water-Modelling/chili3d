@@ -28,6 +28,7 @@ export interface IDocument extends IPropertyChanged, IDisposable, ISerialize {
     readonly visual: IVisual;
     readonly application: IApplication;
     materials: ObservableCollection<Material>;
+    readonly boundaryTypes: Map<string, string>;
     addNode(...nodes: INode[]): void;
     addNodeObserver(observer: INodeChangedObserver): void;
     removeNodeObserver(observer: INodeChangedObserver): void;

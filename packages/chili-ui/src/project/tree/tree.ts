@@ -8,10 +8,13 @@ import {
     INodeLinkedList,
     NodeRecord,
     PubSub,
+    ShapeNode,
     ShapeType,
     Transaction,
     VisualNode,
+    VisualState,
 } from "chili-core";
+import { ThreeMeshObject } from "chili-three/src/threeVisualObject";
 import { NodeSelectionHandler, ShapeSelectionHandler } from "chili-vis";
 import style from "./tree.module.css";
 import { TreeItem } from "./treeItem";
@@ -23,6 +26,7 @@ export class Tree extends HTMLElement implements INodeChangedObserver {
     private lastClicked: INode | undefined;
     private readonly selectedNodes: Set<INode> = new Set();
     private dragging: INode[] | undefined;
+    private isHandlingSelection = false;
 
     constructor(private document: IDocument) {
         super();
@@ -87,17 +91,106 @@ export class Tree extends HTMLElement implements INodeChangedObserver {
         selected: INode[],
         unselected: INode[],
     ) => {
-        unselected.forEach((x) => {
-            this.nodeMap.get(x)?.removeSelectedStyle(style.selected);
-            this.selectedNodes.delete(x);
-        });
-        this.setLastClickItem(undefined);
-        selected.forEach((model) => {
-            this.selectedNodes.add(model);
-            this.nodeMap.get(model)?.addSelectedStyle(style.selected);
-        });
-        this.scrollToNode(selected);
+        if (this.isHandlingSelection) return;
+        this.isHandlingSelection = true;
+
+        try {
+            // Handle folder selection/deselection
+            unselected.forEach((x) => {
+                this.nodeMap.get(x)?.removeSelectedStyle(style.selected);
+                this.selectedNodes.delete(x);
+            });
+
+            selected.forEach((model) => {
+                this.selectedNodes.add(model);
+                this.nodeMap.get(model)?.addSelectedStyle(style.selected);
+            });
+
+            // Handle faces in folders
+            const facesToSelect: INode[] = [];
+            const facesToUnselect: INode[] = [];
+
+            // Collect faces to select/unselect
+            unselected.forEach((x) => {
+                if (INode.isLinkedListNode(x)) {
+                    let child = (x as INodeLinkedList).firstChild;
+                    while (child) {
+                        if (child instanceof ShapeNode && child.shape.isOk) {
+                            facesToUnselect.push(child);
+                        }
+                        child = child.nextSibling;
+                    }
+                }
+            });
+
+            selected.forEach((model) => {
+                if (INode.isLinkedListNode(model)) {
+                    let child = (model as INodeLinkedList).firstChild;
+                    while (child) {
+                        if (child instanceof ShapeNode && child.shape.isOk) {
+                            facesToSelect.push(child);
+                        }
+                        child = child.nextSibling;
+                    }
+                }
+            });
+
+            // Apply face selection changes
+            if (facesToUnselect.length > 0) {
+                this.document.selection.setSelection([], true);
+            }
+            if (facesToSelect.length > 0) {
+                this.document.selection.setSelection(facesToSelect, true);
+            }
+
+            this.setLastClickItem(undefined);
+            this.scrollToNode(selected);
+        } finally {
+            this.isHandlingSelection = false;
+        }
     };
+
+    private resetFolderFaceColors(folder: INode) {
+        if (!INode.isLinkedListNode(folder)) return;
+
+        let child = (folder as INodeLinkedList).firstChild;
+        while (child) {
+            if (child instanceof ShapeNode && child.shape.isOk) {
+                // Reset to original material
+                const visualObject = this.document.visual.context.getVisual(child);
+                if (visualObject instanceof ThreeMeshObject) {
+                    // Remove the face from the selection state
+                    this.document.visual.highlighter.removeState(
+                        visualObject,
+                        VisualState.edgeHighlight,
+                        ShapeType.Shape,
+                    );
+                }
+            }
+            child = child.nextSibling;
+        }
+    }
+
+    private setFolderFaceColors(folder: INode) {
+        if (!INode.isLinkedListNode(folder)) return;
+
+        let child = (folder as INodeLinkedList).firstChild;
+        while (child) {
+            if (child instanceof ShapeNode && child.shape.isOk) {
+                // Set selected folder material
+                const visualObject = this.document.visual.context.getVisual(child);
+                if (visualObject instanceof ThreeMeshObject) {
+                    // Add the face to the selection state with edge highlight
+                    this.document.visual.highlighter.addState(
+                        visualObject,
+                        VisualState.edgeHighlight,
+                        ShapeType.Shape,
+                    );
+                }
+            }
+            child = child.nextSibling;
+        }
+    }
 
     private ensureHasHTML(records: NodeRecord[]) {
         records.forEach((record) => {
@@ -180,7 +273,32 @@ export class Tree extends HTMLElement implements INodeChangedObserver {
         }
 
         this.setLastClickItem(item);
+
+        // Check if the clicked item is a folder with faces
+        if (INode.isLinkedListNode(item)) {
+            const hasFaces = this.checkFolderForFaces(item);
+            if (hasFaces) {
+                PubSub.default.pub("showBoundaryCondition", this.document, item);
+            }
+        }
     };
+
+    private checkFolderForFaces(folder: INode): boolean {
+        let hasFaces = false;
+        if (!INode.isLinkedListNode(folder)) return false;
+
+        let child = (folder as INodeLinkedList).firstChild;
+
+        while (child) {
+            if (child instanceof ShapeNode && child.shape.isOk) {
+                hasFaces = true;
+                break;
+            }
+            child = child.nextSibling;
+        }
+
+        return hasFaces;
+    }
 
     private handleShiftClick(item: INode) {
         if (this.lastClicked) {

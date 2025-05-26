@@ -4,7 +4,11 @@
 import { I18n, IApplication, PubSub, Transaction } from "chili-core";
 
 export async function importFiles(application: IApplication, files: File[] | FileList) {
-    let document = application.activeView?.document ?? (await application.newDocument("Untitled"));
+    let document = application.activeView?.document;
+    if (!document) {
+        throw new Error("No active document available");
+    }
+
     PubSub.default.pub(
         "showPermanent",
         async () => {
@@ -16,4 +20,10 @@ export async function importFiles(application: IApplication, files: File[] | Fil
         "toast.excuting{0}",
         I18n.translate("command.import"),
     );
+}
+
+export function getProjectNameFromUrl(): string {
+    const urlParams = new URLSearchParams(window.location.search);
+    const name = urlParams.get("name");
+    return name || "Default Project";
 }

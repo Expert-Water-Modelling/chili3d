@@ -1,0 +1,85 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--chili-panel-background);
+    border-top: 1px solid var(--chili-border);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    gap: 8px;
+    overflow: auto;
+    height: 100%;
+    flex: 1;
+    background-color: white;
+}
+
+.header {
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--chili-text-primary);
+    padding: 8px;
+    border-bottom: 1px solid var(--chili-border);
+    margin: -8px -8px 8px -8px;
+    background-color: var(--chili-panel-background);
+    width: calc(100% + 16px);
+}
+
+.typeContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label {
+    font-size: 14px;
+    color: var(--chili-text-secondary);
+}
+
+.select {
+    padding: 8px;
+    border: 1px solid var(--chili-border);
+    border-radius: 4px;
+    background-color: var(--chili-input-background);
+    color: var(--chili-text-primary);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.select:hover {
+    border-color: var(--chili-primary);
+}
+
+.select:focus {
+    outline: none;
+    border-color: var(--chili-primary);
+    box-shadow: 0 0 0 2px var(--chili-primary-light);
+}
+
+.buttonContainer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 8px;
+}
+
+.button {
+    padding: 6px 12px;
+    border-radius: 4px;
+    background-color: var(--chili-button-background);
+    color: var(--chili-text-primary);
+    cursor: pointer;
+    user-select: none;
+    font-size: 14px;
+}
+
+.button:hover {
+    background-color: var(--chili-button-hover);
+}
+
+.button:active {
+    background-color: var(--chili-button-active);
+}

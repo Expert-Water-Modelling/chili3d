@@ -1,10 +1,10 @@
 // Part of the Chili3d Project, under the AGPL-3.0 License.
 // See LICENSE file in the project root for full license information.
 
-import { LineMaterial } from "three/examples/jsm/lines/LineMaterial";
-import { ThreeHelper } from "./threeHelper";
 import { VisualConfig } from "chili-core";
 import { DoubleSide, MeshLambertMaterial } from "three";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial";
+import { ThreeHelper } from "./threeHelper";
 
 export const hilightEdgeMaterial = new LineMaterial({
     linewidth: 3,
@@ -35,6 +35,13 @@ export const selectedEdgeMaterial = new LineMaterial({
     polygonOffset: true,
     polygonOffsetFactor: -4,
     polygonOffsetUnits: -4,
+});
+
+export const selectedFolderFaceMaterial = new MeshLambertMaterial({
+    color: ThreeHelper.fromColor(VisualConfig.selectedFaceColor),
+    side: DoubleSide,
+    transparent: true,
+    opacity: 0.3,
 });
 
 export const faceTransparentMaterial = new MeshLambertMaterial({

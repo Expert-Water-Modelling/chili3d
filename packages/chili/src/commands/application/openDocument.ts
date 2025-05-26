@@ -13,6 +13,11 @@ export class OpenDocument implements ICommand {
         PubSub.default.pub(
             "showPermanent",
             async () => {
+                // Close existing document if any
+                if (app.activeView?.document) {
+                    await app.activeView.document.close();
+                }
+
                 let files = await readFileAsync(".cd", false);
                 if (files.isOk) {
                     let json: Serialized = JSON.parse(files.value[0].data);

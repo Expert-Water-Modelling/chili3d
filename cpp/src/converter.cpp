@@ -15,11 +15,14 @@
 #include <TDocStd_Document.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Iterator.hxx>
+#include <TopoDS_Face.hxx>
+#include <TopoDS.hxx>
 #include <XCAFDoc_ColorTool.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
 #include <STEPControl_Writer.hxx>
 #include <IGESControl_Writer.hxx>
+#include <TopExp_Explorer.hxx>
 
 using namespace emscripten;
 
@@ -221,6 +224,20 @@ ShapeNode parseShape(TopoDS_Shape &shape, const Handle_XCAFDoc_ShapeTool &shapeT
         }
         return node;
     }
+    else if (shape.ShapeType() == TopAbs_SHELL || shape.ShapeType() == TopAbs_SOLID)
+    {
+        auto node = initGroupNode(shape, shapeTool);
+        // Extract faces from shell or solid
+        TopExp_Explorer explorer(shape, TopAbs_FACE);
+        while (explorer.More())
+        {
+            TopoDS_Face face = TopoDS::Face(explorer.Current());
+            auto faceNode = initShapeNode(face, shapeTool, colorTool);
+            node.children.push_back(faceNode);
+            explorer.Next();
+        }
+        return node;
+    }
     return initShapeNode(shape, shapeTool, colorTool);
 }
 
@@ -375,6 +392,31 @@ public:
         igesWriter.Write(oss);
         return oss.str();
     }
+
+    static TopoDS_Shape deleteFace(const TopoDS_Shape& shape, const TopoDS_Face& faceToDelete) {
+        BRep_Builder builder;
+        TopoDS_Shape result;
+        
+        if (shape.ShapeType() == TopAbs_SHELL || shape.ShapeType() == TopAbs_SOLID) {
+            TopExp_Explorer explorer(shape, TopAbs_FACE);
+            bool found = false;
+            
+            while (explorer.More()) {
+                TopoDS_Face currentFace = TopoDS::Face(explorer.Current());
+                if (!currentFace.IsSame(faceToDelete)) {
+                    if (!found) {
+                        result = currentFace;
+                        found = true;
+                    } else {
+                        builder.Add(result, currentFace);
+                    }
+                }
+                explorer.Next();
+            }
+        }
+        
+        return result;
+    }
 };
 
 EMSCRIPTEN_BINDINGS(Converter)
@@ -395,5 +437,6 @@ EMSCRIPTEN_BINDINGS(Converter)
         .class_function("convertFromStep", &Converter::convertFromStep)
         .class_function("convertFromIges", &Converter::convertFromIges)
         .class_function("convertToStep", &Converter::convertToStep)
-        .class_function("convertToIges", &Converter::convertToIges);
+        .class_function("convertToIges", &Converter::convertToIges)
+        .class_function("deleteFace", &Converter::deleteFace);
 }

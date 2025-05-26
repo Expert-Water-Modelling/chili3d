@@ -10,18 +10,7 @@ import {
     PubSub,
     RecentDocumentDTO,
 } from "chili-core";
-import {
-    LanguageSelector,
-    a,
-    button,
-    collection,
-    div,
-    img,
-    label,
-    localize,
-    span,
-    svg,
-} from "../components";
+import { LanguageSelector, a, button, collection, div, img, localize, span, svg } from "../components";
 import style from "./home.module.css";
 
 interface ApplicationCommand {
@@ -32,12 +21,12 @@ interface ApplicationCommand {
 
 const applicationCommands = new ObservableCollection<ApplicationCommand>(
     {
-        display: "command.document.new",
-        onclick: () => PubSub.default.pub("executeCommand", "doc.new"),
-    },
-    {
         display: "command.document.open",
         onclick: () => PubSub.default.pub("executeCommand", "doc.open"),
+    },
+    {
+        display: "command.document.new",
+        onclick: () => PubSub.default.pub("executeCommand", "doc.new"),
     },
 );
 
@@ -55,9 +44,23 @@ export class Home extends HTMLElement {
     }
 
     private async getDocuments() {
-        return new ObservableCollection(
-            ...(await this.app.storage.page(Constants.DBName, Constants.RecentTable, 0)),
-        );
+        const documents = new ObservableCollection<RecentDocumentDTO>();
+
+        // Always add the current document
+        if (this.app.activeView?.document) {
+            const currentDoc = this.app.activeView.document;
+            // Ensure we have a preview image
+            this.app.activeView.update();
+            const image = this.app.activeView.toImage();
+            documents.push({
+                id: currentDoc.id,
+                name: currentDoc.name,
+                date: Date.now(),
+                image: image || "",
+            });
+        }
+
+        return documents;
     }
 
     async render() {
@@ -73,22 +76,8 @@ export class Home extends HTMLElement {
     private leftSection() {
         return div(
             { className: style.left },
-            div(
-                { className: style.top },
-                this.logoSection(),
-                this.applicationCommands(),
-                this.currentDocument(),
-            ),
+            div({ className: style.top }, this.applicationCommands(), this.currentDocument()),
             this.links(),
-        );
-    }
-
-    private logoSection() {
-        return div(
-            { className: style.logo },
-            svg({ icon: "icon-chili" }),
-            span({ textContent: "CHILI3D" }),
-            span({ className: style.version, textContent: __APP_VERSION__ }),
         );
     }
 
@@ -120,18 +109,14 @@ export class Home extends HTMLElement {
     private links() {
         return div(
             { className: style.bottom },
-            a({
-                textContent: "Github",
-                href: "https://github.com/xiangechen/chili3d",
-                target: "_blank",
-            }),
+            a({ href: "https://github.com/chili3d/chili3d", textContent: "GitHub" }),
+            a({ href: "https://chili3d.com", textContent: "Website" }),
         );
     }
 
     private rightSection(documents: ObservableCollection<RecentDocumentDTO>) {
         return div(
             { className: style.right },
-            label({ className: style.welcome, textContent: localize("home.welcome") }),
             div({ className: style.recent, textContent: localize("home.recent") }),
             this.documentCollection(documents),
         );
@@ -168,23 +153,6 @@ export class Home extends HTMLElement {
         );
     }
 
-    private deleteIcon(item: RecentDocumentDTO, documents: ObservableCollection<RecentDocumentDTO>) {
-        return svg({
-            className: style.delete,
-            icon: "icon-times",
-            onclick: async (e) => {
-                e.stopPropagation();
-                if (window.confirm(I18n.translate("prompt.deleteDocument{0}", item.name))) {
-                    await Promise.all([
-                        this.app.storage.delete(Constants.DBName, Constants.DocumentTable, item.id),
-                        this.app.storage.delete(Constants.DBName, Constants.RecentTable, item.id),
-                    ]);
-                    documents.remove(item);
-                }
-            },
-        });
-    }
-
     private handleDocumentClick(item: RecentDocumentDTO) {
         if (this.hasOpen(item.id)) {
             PubSub.default.pub("displayHome", false);
@@ -199,6 +167,27 @@ export class Home extends HTMLElement {
                 I18n.translate("command.document.open"),
             );
         }
+    }
+
+    private deleteIcon(item: RecentDocumentDTO, documents: ObservableCollection<RecentDocumentDTO>) {
+        if (this.app.activeView?.document?.id === item.id) {
+            return div();
+        }
+
+        return svg({
+            className: style.delete,
+            icon: "icon-times",
+            onclick: async (e) => {
+                e.stopPropagation();
+                if (window.confirm(I18n.translate("prompt.deleteDocument{0}", item.name))) {
+                    await Promise.all([
+                        this.app.storage.delete(Constants.DBName, Constants.DocumentTable, item.id),
+                        this.app.storage.delete(Constants.DBName, Constants.RecentTable, item.id),
+                    ]);
+                    documents.remove(item);
+                }
+            },
+        });
     }
 }
 
