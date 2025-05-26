@@ -110,7 +110,7 @@ export class Home extends HTMLElement {
         return div(
             { className: style.bottom },
             a({ href: "https://github.com/chili3d/chili3d", textContent: "GitHub" }),
-            a({ href: "https://chili3d.com", textContent: "Website" }),
+            a({ href: "https://chili3d.com", textContent: "Websites" }),
         );
     }
 
