@@ -1,0 +1,90 @@
+name: CI/CD Pipeline for Develop Branch
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set lowercase image name
+      id: image
+      run: echo "name=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix=develop-
+          type=raw,value=develop-latest
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Set lowercase image name
+      id: image
+      run: echo "name=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        password: ${{ secrets.PASSWORD }}
+        script: |
+          # Login to GitHub Container Registry
+          echo ${{ secrets.REGISTRY_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # Pull latest develop image
+          docker pull ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:develop-latest
+          
+          # Stop existing container
+          docker stop myapp-develop || true
+          docker rm myapp-develop || true
+          
+          # Run new container using your current configuration
+          docker run -d \
+            --name myapp-develop \
+            --restart unless-stopped \
+            -p 8080:8080 \
+            -e NODE_ENV=development \
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:develop-latest \
+            npm run dev
+          
+          # Clean up only old versions of this specific develop image
+          docker images ${{ env.REGISTRY }}/${{ steps.image.outputs.name }} --format "table {{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedAt}}" | grep develop | tail -n +2 | head -n -1 | awk '{print $2}' | xargs -r docker rmi || true
