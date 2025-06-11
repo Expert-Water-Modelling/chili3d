@@ -164,6 +164,7 @@ export default {
         "prompt.default":
             "Middle mouse button to pan the view, Shift + Middle button to rotate the view, Middle button to scroll the zoom view",
         "prompt.deleteDocument{0}": "Do you want to delete {0}?",
+        "prompt.deleteFace": "Delete Face",
         "prompt.polygon.close": "Close",
         "prompt.saveDocument{0}": "Do you want to save the changes to {0}?",
         "prompt.select.edges": "Please select edges",

@@ -143,6 +143,14 @@ export class Tree extends HTMLElement implements INodeChangedObserver {
                 this.document.selection.setSelection(facesToSelect, true);
             }
 
+            // Ensure the selected items are visible in the tree
+            selected.forEach((node) => {
+                const treeItem = this.nodeMap.get(node);
+                if (treeItem) {
+                    treeItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+            });
+
             this.setLastClickItem(undefined);
             this.scrollToNode(selected);
         } finally {
@@ -275,12 +283,12 @@ export class Tree extends HTMLElement implements INodeChangedObserver {
         this.setLastClickItem(item);
 
         // Check if the clicked item is a folder with faces
-        if (INode.isLinkedListNode(item)) {
-            const hasFaces = this.checkFolderForFaces(item);
-            if (hasFaces) {
-                PubSub.default.pub("showBoundaryCondition", this.document, item);
-            }
-        }
+        // if (INode.isLinkedListNode(item)) {
+        //     const hasFaces = this.checkFolderForFaces(item);
+        //     if (hasFaces) {
+        //         PubSub.default.pub("showBoundaryCondition", this.document, item);
+        //     }
+        // }
     };
 
     private checkFolderForFaces(folder: INode): boolean {

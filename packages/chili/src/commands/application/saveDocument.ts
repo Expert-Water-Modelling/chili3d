@@ -4,16 +4,29 @@
 import axios from "axios";
 import {
     command,
-    DOCUMENT_FILE_EXTENSION,
     gc,
     I18n,
     IApplication,
     ICommand,
     IDocument,
     INode,
+    IShape,
     PubSub,
     ShapeNode,
 } from "chili-core";
+import { OccShapeConverter } from "chili-wasm/src/converter";
+import { OccShape } from "chili-wasm/src/shape";
+import {
+    BufferAttribute,
+    BufferGeometry,
+    DoubleSide,
+    Float32BufferAttribute,
+    Mesh,
+    MeshLambertMaterial,
+    Scene,
+} from "three";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter";
+import { GLBGenerator } from "../../utils/glbGenerator";
 
 declare const wasm: any;
 
@@ -46,13 +59,45 @@ export class SaveDocument implements ICommand {
                     // Since we checked at the start of the function, we can use non-null assertion
                     const document = app.activeView!.document!;
 
-                    // Get the document data exactly like SaveDocumentToFile does
-                    let documentData = document.serialize();
+                    // Remove deleted faces from projectJson
+                    await this.removeDeletedFacesFromProjectJson(document);
 
-                    // Create FormData for the project data
+                    // Update projectJson with new faces
+                    await this.updateProjectJsonWithNewFaces(document);
+
+                    // Get the updated projectJson from localStorage
+                    const projectJson = localStorage.getItem("projectJson");
+                    if (projectJson) {
+                        // Create a timestamp for cache busting
+                        const timestamp = Date.now();
+
+                        // Create FormData for project.json
+                        const projectFormData = new FormData();
+                        const projectBlob = new Blob([projectJson], { type: "application/json" });
+                        projectFormData.append("file", projectBlob, "project.json");
+
+                        // Upload project.json
+                        const projectApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}?t=${timestamp}`;
+                        console.log("Uploading project.json to API:", projectApiUrl);
+
+                        const projectResponse = await axios.post(projectApiUrl, projectFormData, {
+                            headers: {
+                                "Content-Type": "multipart/form-data",
+                                accept: "application/json",
+                            },
+                        });
+
+                        console.log("Project.json uploaded successfully:", projectResponse.data);
+                    }
+
+                    // Serialize document data
+                    const documentData = document.serialize();
                     const formData = new FormData();
-                    const jsonBlob = new Blob([JSON.stringify(documentData)], { type: "application/json" });
-                    formData.append("file", jsonBlob, `${document.name}${DOCUMENT_FILE_EXTENSION}`);
+                    formData.append(
+                        "file",
+                        new Blob([JSON.stringify(documentData)], { type: "application/json" }),
+                        "document.json",
+                    );
 
                     // Send project data to the server
                     const apiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
@@ -68,128 +113,100 @@ export class SaveDocument implements ICommand {
                     console.log("Project data saved successfully:", response.data);
                     PubSub.default.pub("showToast", "toast.document.saved");
 
-                    // After saving, trigger the send functionality
+                    // Convert shapes to STEP format
+                    const shapes: IShape[] = [];
+                    const processedNodes = new Set<string>();
+                    const collectShapes = (node: INode) => {
+                        // Skip if we've already processed this node
+                        if (processedNodes.has(node.id)) {
+                            return;
+                        }
+                        processedNodes.add(node.id);
+
+                        if (node instanceof ShapeNode && node.shape.isOk) {
+                            const shape = node.shape.value;
+                            if (shape instanceof OccShape) {
+                                // Add the entire shape instead of individual faces
+                                console.log(`Adding shape from node ${node.name}`);
+                                shapes.push(shape);
+                            }
+                        }
+
+                        // Process children
+                        if (INode.isLinkedListNode(node)) {
+                            let child = node.firstChild;
+                            while (child) {
+                                collectShapes(child);
+                                child = child.nextSibling;
+                            }
+                        }
+                    };
+
+                    // Start collection from root node
+                    collectShapes(document.rootNode);
+                    console.log(`Total shapes collected: ${shapes.length}`);
+
+                    if (shapes.length > 0) {
+                        const converter = new OccShapeConverter();
+                        const stepResult = converter.convertToSTEP(...shapes);
+
+                        if (stepResult.isOk) {
+                            // Convert the STEP string to a Uint8Array
+                            const encoder = new TextEncoder();
+                            const stepData = encoder.encode(stepResult.value);
+                            const stepBlob = new Blob([stepData], { type: "application/step" });
+                            const stepFormData = new FormData();
+                            stepFormData.append("file", stepBlob, "model.step");
+
+                            // Upload STEP file
+                            const stepApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
+                            console.log("Sending STEP file to API:", stepApiUrl);
+
+                            const stepResponse = await axios.post(stepApiUrl, stepFormData, {
+                                headers: {
+                                    "Content-Type": "multipart/form-data",
+                                    accept: "application/json",
+                                },
+                            });
+
+                            console.log("STEP File API Response:", stepResponse.data);
+                            PubSub.default.pub("showToast", "toast.document.sent");
+                        } else {
+                            console.error("Failed to convert shapes to STEP:", stepResult.error);
+                            PubSub.default.pub("showToast", "toast.fail");
+                        }
+                    }
+
+                    // Generate and upload GLB file
                     try {
-                        // Get all folders and their faces
-                        const folders = this.getFolders(document);
-                        console.log("Found folders:", folders);
+                        // Get face data from the document
+                        const faceData = await this.getFaceDataFromDocument(document);
+                        console.log("Face data for GLB:", faceData);
 
-                        if (folders.size === 0) {
-                            console.warn("No folders found in the document for sending");
-                            return;
-                        }
+                        // Generate GLB using our new generator
+                        const glbData = await GLBGenerator.generateGLB(faceData);
+                        console.log("GLB generation completed, data size:", glbData.byteLength);
 
-                        const mergedShapes = new Map<string, any>();
-                        const folderStlMapping: Array<{ name: string; filename: string; type: string }> = [];
+                        // Create FormData for GLB file
+                        const glbFormData = new FormData();
+                        const glbBlob = new Blob([glbData], { type: "model/gltf-binary" });
+                        glbFormData.append("file", glbBlob, "model.glb");
 
-                        // Process each folder
-                        for (const [folderId, faces] of folders) {
-                            if (faces.length === 0) {
-                                console.log(`Skipping empty folder: ${folderId}`);
-                                continue;
-                            }
+                        // Upload GLB file
+                        const glbApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
+                        console.log("Sending GLB file to API:", glbApiUrl);
 
-                            // Get the folder node to access its name
-                            let folderNode = this.findNode(document.rootNode, folderId);
-
-                            if (!folderNode) {
-                                console.warn(`Folder node not found for ID: ${folderId}`);
-                                continue;
-                            }
-
-                            const folderName = folderNode.name || "Unnamed Folder";
-                            console.log(`Processing folder: ${folderName} (${folderId})`);
-
-                            try {
-                                // Create a shell from the faces
-                                const shellResult = app.shapeFactory.shell(faces);
-                                if (!shellResult.isOk) {
-                                    console.error(
-                                        `Shell creation failed for ${folderName}:`,
-                                        shellResult.error,
-                                    );
-                                    continue;
-                                }
-
-                                // Create a solid from the shell
-                                const solidResult = app.shapeFactory.solid([shellResult.value]);
-                                if (!solidResult.isOk) {
-                                    console.error(
-                                        `Solid creation failed for ${folderName}:`,
-                                        solidResult.error,
-                                    );
-                                    continue;
-                                }
-
-                                mergedShapes.set(folderName, solidResult.value);
-                                const boundaryType = (document as any).boundaryTypes.get(folderId) || "wall";
-                                folderStlMapping.push({
-                                    name: folderName,
-                                    filename: `${folderName}.stl`,
-                                    type: boundaryType,
-                                });
-                            } catch (error) {
-                                console.error(`Error processing folder ${folderName}:`, error);
-                                continue;
-                            }
-                        }
-
-                        if (mergedShapes.size === 0) {
-                            console.warn("No valid shapes were created from the folders");
-                            return;
-                        }
-
-                        // Create FormData for STL files
-                        const stlFormData = new FormData();
-
-                        // Add all STL files to FormData
-                        for (const [folderName, shape] of mergedShapes) {
-                            try {
-                                const stlData = await this.convertToSTL(shape);
-                                const blob = new Blob([stlData], { type: "application/octet-stream" });
-                                stlFormData.append("files", blob, `${folderName}.stl`);
-                                console.log(`Added STL file for folder: ${folderName}`);
-                            } catch (error) {
-                                console.error(`Error converting folder ${folderName} to STL:`, error);
-                            }
-                        }
-
-                        // Send STL files to the STL upload endpoint
-                        const stlApiUrl = `${this.API_BASE_URL}/upload_stl_files/${userId}/${projectId}`;
-                        console.log("Sending STL files to API:", stlApiUrl);
-
-                        const stlResponse = await axios.post(stlApiUrl, stlFormData, {
+                        const glbResponse = await axios.post(glbApiUrl, glbFormData, {
                             headers: {
                                 "Content-Type": "multipart/form-data",
                                 accept: "application/json",
                             },
                         });
 
-                        console.log("STL Files API Response:", stlResponse.data);
-
-                        // Create FormData for JSON file
-                        const jsonFormData = new FormData();
-                        const jsonBlob = new Blob([JSON.stringify(folderStlMapping, null, 2)], {
-                            type: "application/json",
-                        });
-                        jsonFormData.append("file", jsonBlob, "main.json");
-                        console.log("Added mapping JSON file");
-
-                        // Send JSON file to the project files endpoint
-                        const jsonApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
-                        console.log("Sending JSON file to API:", jsonApiUrl);
-
-                        const jsonResponse = await axios.post(jsonApiUrl, jsonFormData, {
-                            headers: {
-                                "Content-Type": "multipart/form-data",
-                                accept: "application/json",
-                            },
-                        });
-
-                        console.log("JSON File API Response:", jsonResponse.data);
+                        console.log("GLB File API Response:", glbResponse.data);
                         PubSub.default.pub("showToast", "toast.document.sent");
                     } catch (error) {
-                        console.error("Send document error:", error);
+                        console.error("GLB generation/upload error:", error);
                         if (axios.isAxiosError(error)) {
                             console.error("API Error:", {
                                 status: error.response?.status,
@@ -221,12 +238,12 @@ export class SaveDocument implements ICommand {
         const rootNode = document.rootNode;
         console.log("Starting folder processing with root node:", rootNode);
 
-        const processNode = (node: INode, currentFolder: string) => {
+        const processNode = (node: INode, parentFolderId: string | null) => {
             console.log("Processing node:", {
                 id: node.id,
                 name: node.name,
                 type: node.constructor.name,
-                currentFolder,
+                parentFolderId,
             });
 
             if (INode.isLinkedListNode(node)) {
@@ -241,25 +258,25 @@ export class SaveDocument implements ICommand {
                     processNode(child, node.id);
                     child = child.nextSibling;
                 }
-            } else if (node instanceof ShapeNode) {
+            } else if (node instanceof ShapeNode && parentFolderId) {
                 // This is a shape node
-                console.log(`Found shape node in folder ${currentFolder}:`, {
+                console.log(`Found shape node in folder ${parentFolderId}:`, {
                     id: node.id,
                     name: node.name,
                     hasShape: node.shape.isOk,
                 });
-                const faces = folders.get(currentFolder) || [];
+                const faces = folders.get(parentFolderId) || [];
                 if (node.shape.isOk) {
                     faces.push(node.shape.value);
-                    console.log(`Added face to folder ${currentFolder}`);
+                    console.log(`Added face to folder ${parentFolderId}`);
                 } else {
                     console.warn(`Shape node ${node.id} has no valid shape`);
                 }
-                folders.set(currentFolder, faces);
+                folders.set(parentFolderId, faces);
             }
         };
 
-        processNode(rootNode, "Root");
+        processNode(rootNode, null);
         return folders;
     }
 
@@ -358,5 +375,329 @@ export class SaveDocument implements ICommand {
         }
 
         return buffer;
+    }
+
+    private async convertToGLB(shape: any, document: IDocument): Promise<ArrayBuffer> {
+        return new Promise((resolve, reject) => {
+            gc((c) => {
+                try {
+                    console.log("Starting GLB conversion process");
+                    // Create a mesher instance with the shape
+                    const occMesher = c(new wasm.Mesher(shape.shape, 0.1));
+                    const meshData = c(occMesher.mesh());
+                    const faceMeshData = c(meshData.faceMeshData);
+
+                    console.log("Mesh data created, creating Three.js geometry");
+                    // Create Three.js geometry and mesh
+                    const geometry = new BufferGeometry();
+
+                    // Ensure arrays are properly typed
+                    const positions = new Float32Array(faceMeshData.position);
+                    const normals = new Float32Array(faceMeshData.normal);
+                    const indices = new Uint32Array(faceMeshData.index);
+
+                    // Get face data from the document
+                    const faceData = this.getFaceDataFromDocument(document);
+                    console.log("Face data from document:", faceData);
+
+                    // Add face attributes to the geometry
+                    const faceAttributes = new Float32Array(faceMeshData.index.length);
+                    for (let i = 0; i < faceMeshData.index.length; i += 3) {
+                        const faceId = i / 3;
+                        faceAttributes[i] = faceId;
+                        faceAttributes[i + 1] = faceId;
+                        faceAttributes[i + 2] = faceId;
+                    }
+                    geometry.setAttribute("faceId", new Float32BufferAttribute(faceAttributes, 1));
+
+                    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+                    geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+                    geometry.setIndex(new BufferAttribute(indices, 1));
+
+                    const material = new MeshLambertMaterial({ side: DoubleSide });
+                    const mesh = new Mesh(geometry, material);
+                    mesh.userData["faceData"] = {
+                        totalFaces: indices.length / 3,
+                        faceAttributes: Array.from(faceAttributes),
+                        vertexIndices: Array.from(indices),
+                        documentFaces: faceData,
+                    };
+
+                    // Create a scene and add the mesh
+                    const scene = new Scene();
+                    scene.add(mesh);
+
+                    console.log("Scene created, starting GLB export");
+                    // Export to GLB
+                    const exporter = new GLTFExporter();
+                    exporter.parse(
+                        scene,
+                        (glb) => {
+                            console.log("GLB export completed successfully");
+                            // Set the generator version
+                            const glbData = glb as {
+                                asset: { generator: string };
+                                meshes: Array<{
+                                    primitives: Array<{
+                                        attributes: { [key: string]: number };
+                                        indices: number;
+                                        material: number;
+                                    }>;
+                                    extras?: any;
+                                }>;
+                                accessors: Array<{
+                                    bufferView: number;
+                                    componentType: number;
+                                    count: number;
+                                    type: string;
+                                    min?: number[];
+                                    max?: number[];
+                                }>;
+                                bufferViews: Array<{
+                                    buffer: number;
+                                    byteOffset: number;
+                                    byteLength: number;
+                                    target?: number;
+                                }>;
+                                buffers: Array<{
+                                    byteLength: number;
+                                    uri: string;
+                                }>;
+                            };
+
+                            glbData.asset.generator = "THREE.GLTFExporter r164";
+
+                            // Convert binary data to human-readable format
+                            if (glbData.buffers && glbData.buffers.length > 0) {
+                                glbData.buffers.forEach((buffer, index) => {
+                                    if (buffer.uri && buffer.uri.startsWith("data:")) {
+                                        // Extract the base64 data
+                                        const base64Data = buffer.uri.split(",")[1];
+                                        // Convert base64 to array of numbers
+                                        const binaryData = atob(base64Data);
+                                        const numbers = new Array(binaryData.length);
+                                        for (let i = 0; i < binaryData.length; i++) {
+                                            numbers[i] = binaryData.charCodeAt(i);
+                                        }
+                                        // Replace the binary data with the array of numbers
+                                        buffer.uri = JSON.stringify(numbers);
+                                    }
+                                });
+                            }
+
+                            // Ensure mesh data is included in the JSON structure
+                            if (glbData.meshes && glbData.meshes.length > 0) {
+                                const mesh = glbData.meshes[0];
+                                if (mesh.primitives && mesh.primitives.length > 0) {
+                                    const primitive = mesh.primitives[0];
+                                    // Ensure position, normal, and face attributes are present
+                                    if (
+                                        !primitive.attributes["POSITION"] ||
+                                        !primitive.attributes["NORMAL"] ||
+                                        !primitive.attributes["faceId"]
+                                    ) {
+                                        console.warn("Missing required attributes in mesh");
+                                    }
+
+                                    // Add face data to the mesh's extras
+                                    if (!mesh.extras) {
+                                        mesh.extras = {};
+                                    }
+                                    mesh.extras.documentFaces = faceData;
+                                }
+                            }
+
+                            // Convert the JSON string to ArrayBuffer
+                            const encoder = new TextEncoder();
+                            const jsonString = JSON.stringify(glbData, null, 2); // Pretty print the JSON
+                            const uint8Array = encoder.encode(jsonString);
+                            const buffer = new ArrayBuffer(uint8Array.length);
+                            new Uint8Array(buffer).set(uint8Array);
+                            resolve(buffer);
+                        },
+                        (error) => {
+                            console.error("GLB export error:", error);
+                            reject(error);
+                        },
+                        {
+                            binary: false,
+                            embedImages: false,
+                            includeCustomExtensions: true,
+                            onlyVisible: true,
+                            maxTextureSize: 4096,
+                            animations: [],
+                            trs: true,
+                        },
+                    );
+                } catch (error) {
+                    console.error("Error in GLB conversion:", error);
+                    reject(error);
+                }
+            });
+        });
+    }
+
+    private async getFaceDataFromDocument(document: IDocument): Promise<any[]> {
+        const faces: any[] = [];
+        let faceCounter = 1;
+
+        const processNode = async (node: INode) => {
+            if (node instanceof ShapeNode) {
+                if (node.shape.isOk) {
+                    // Get mesh data from the shape
+                    const shape = node.shape.value;
+                    const meshData = await this.getMeshDataFromShape(shape);
+
+                    // Use sequential numbering for face names
+                    const faceName = `Face ${faceCounter}`;
+                    faces.push({
+                        id: faceCounter.toString(),
+                        name: faceName,
+                        type: node.constructor.name,
+                        parentId: node.parent?.id,
+                        positions: meshData.positions,
+                        normals: meshData.normals,
+                        indices: meshData.indices,
+                    });
+                    faceCounter++;
+                }
+            }
+            if (INode.isLinkedListNode(node)) {
+                let child = (node as any).firstChild;
+                while (child) {
+                    await processNode(child);
+                    child = child.nextSibling;
+                }
+            }
+        };
+        await processNode(document.rootNode);
+        return faces;
+    }
+
+    private getMeshDataFromShape(
+        shape: any,
+    ): Promise<{ positions: number[]; normals: number[]; indices: number[] }> {
+        return new Promise((resolve) => {
+            gc((c) => {
+                // Create a mesher instance with the shape
+                const occMesher = c(new wasm.Mesher(shape.shape, 0.1));
+                const meshData = c(occMesher.mesh());
+                const faceMeshData = c(meshData.faceMeshData);
+
+                resolve({
+                    positions: Array.from(faceMeshData.position),
+                    normals: Array.from(faceMeshData.normal),
+                    indices: Array.from(faceMeshData.index),
+                });
+            });
+        });
+    }
+
+    private async updateProjectJsonWithNewFaces(document: IDocument): Promise<void> {
+        try {
+            // Get current projectJson from localStorage
+            const currentProjectJson = localStorage.getItem("projectJson");
+            if (!currentProjectJson) {
+                console.error("No projectJson found in localStorage");
+                return;
+            }
+
+            const projectData = JSON.parse(currentProjectJson);
+
+            // Get current faces from document
+            const currentFaces = await this.getFaceDataFromDocument(document);
+
+            // Create a map of existing faces by name for quick lookup
+            const existingFacesByName = new Map(projectData.faces.map((face: any) => [face.name, face]));
+
+            // Track which faces we've processed to avoid duplicates
+            const processedFaceNames = new Set<string>();
+
+            // Filter and update faces
+            const updatedFaces = projectData.faces.filter((face: any) => {
+                // If we've already processed this face name, skip it
+                if (processedFaceNames.has(face.name)) {
+                    return false;
+                }
+                processedFaceNames.add(face.name);
+                return true;
+            });
+
+            // Add new faces that don't exist in projectJson
+            currentFaces.forEach((face) => {
+                if (!existingFacesByName.has(face.name)) {
+                    // Generate a unique ID for the new face
+                    const newFace = {
+                        ...face,
+                        id: crypto.randomUUID(),
+                        groupId: projectData.groups[0]?.id || null, // Add to first group or null if no groups
+                        visible: true,
+                    };
+                    updatedFaces.push(newFace);
+                    console.log(`Added new face: ${newFace.name} with ID: ${newFace.id}`);
+                }
+            });
+
+            // Update projectJson with deduplicated and new faces
+            projectData.faces = updatedFaces;
+
+            // Update localStorage with new projectJson
+            localStorage.setItem("projectJson", JSON.stringify(projectData));
+            console.log(`Updated projectJson with ${updatedFaces.length} faces`);
+
+            // Get project ID and user ID from URL
+            const urlParams = new URLSearchParams(window.location.search);
+        } catch (error) {
+            console.error("Error updating projectJson with new faces:", error);
+        }
+    }
+
+    private async removeDeletedFacesFromProjectJson(document: IDocument): Promise<void> {
+        try {
+            // Get current projectJson from localStorage
+            const currentProjectJson = localStorage.getItem("projectJson");
+            if (!currentProjectJson) {
+                console.error("No projectJson found in localStorage");
+                return;
+            }
+
+            const projectData = JSON.parse(currentProjectJson);
+
+            // Get current faces from document
+            const currentFaces = await this.getFaceDataFromDocument(document);
+
+            // Create a set of current face names for quick lookup
+            const currentFaceNames = new Set(currentFaces.map((face) => face.name));
+
+            // Find faces that need to be removed
+            const facesToRemove = projectData.faces.filter(
+                (face: { name: string; id: string }) => !currentFaceNames.has(face.name),
+            );
+
+            // Create a set of face IDs to remove for efficient lookup
+            const faceIdsToRemove = new Set(facesToRemove.map((face: { id: string }) => face.id));
+
+            // Update faces array with remaining faces
+            const updatedFaces = projectData.faces.filter((face: { name: string }) =>
+                currentFaceNames.has(face.name),
+            );
+            projectData.faces = updatedFaces;
+
+            // Clean up faceIds in all groups
+            if (projectData.groups) {
+                projectData.groups.forEach((group: any) => {
+                    if (group.faceIds) {
+                        // Remove deleted face IDs from the group
+                        group.faceIds = group.faceIds.filter((id: string) => !faceIdsToRemove.has(id));
+                    }
+                });
+            }
+
+            // Update localStorage with new projectJson
+            localStorage.setItem("projectJson", JSON.stringify(projectData));
+            console.log(`Updated projectJson after face deletion. Remaining faces: ${updatedFaces.length}`);
+        } catch (error) {
+            console.error("Error updating projectJson after face deletion:", error);
+        }
     }
 }

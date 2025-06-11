@@ -5,10 +5,8 @@ import { getProjectNameFromUrl } from "chili";
 import {
     Button,
     CommandKeys,
-    Constants,
     I18nKeys,
     IApplication,
-    IDocument,
     IWindow,
     PubSub,
     RibbonTab,
@@ -46,52 +44,113 @@ export class MainWindow implements IWindow {
         this._initEditor(app);
         this._initSubs(app);
 
-        // Get the project name from URL
+        // Get the project name and IDs from URL
         const projectName = getProjectNameFromUrl();
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectId = urlParams.get("id");
+        const userId = urlParams.get("user_id");
         console.log("Initializing with project name:", projectName);
 
-        // Check if document is already initialized using localStorage
-        const isInitialized = localStorage.getItem(MainWindow.DOC_INIT_KEY) === "true";
-        if (isInitialized) {
-            console.log("Document already initialized, skipping document creation");
-            return;
-        }
-
-        let document: IDocument | undefined;
-
-        // Try to find an existing document with this name
-        const recentDocs = await app.storage.page(Constants.DBName, Constants.RecentTable, 0);
-        if (recentDocs && recentDocs.length > 0) {
-            // Look for a document with matching name
-            const matchingDoc = recentDocs.find((doc) => doc.name === projectName);
-            if (matchingDoc) {
-                console.log("Found existing document:", matchingDoc);
-                document = await app.openDocument(matchingDoc.id);
-            }
-        }
-
-        // If no document was found, create a new one
+        // Create a new document
+        console.log("Creating new document with name:", projectName);
+        const document = await app.newDocument(projectName);
         if (!document) {
-            console.log("Creating new document with name:", projectName);
-            document = await app.newDocument(projectName);
-            if (!document) {
-                throw new Error("Failed to create default document");
-            }
-            // Ensure the document is saved to appear in recent documents
-            await document.save();
+            throw new Error("Failed to create default document");
         }
 
-        // Mark document as initialized in localStorage
-        localStorage.setItem(MainWindow.DOC_INIT_KEY, "true");
-
-        // Switch to document view and ensure command system is ready
+        // Switch to document view first to ensure proper initialization
         PubSub.default.pub("displayHome", false);
+
+        // If we have project and user IDs, try to load the STEP file
+        if (projectId && userId) {
+            try {
+                // Download the STEP file
+                const response = await fetch(
+                    `http://37.59.205.2:8000/download_project_step_file/${userId}/${projectId}`,
+                );
+                if (!response.ok) {
+                    throw new Error(`Failed to download STEP file: ${response.statusText}`);
+                }
+
+                // Convert the response to ArrayBuffer
+                const stepData = await response.arrayBuffer();
+                const stepArray = new Uint8Array(stepData);
+
+                // Import the STEP file into the document
+                const result = document.application.shapeFactory.converter.convertFromSTEP(
+                    document,
+                    stepArray,
+                );
+                if (!result.isOk) {
+                    throw new Error("Failed to convert STEP file");
+                }
+
+                // Add the imported nodes to the document
+                const importedNode = result.value;
+                document.addNode(importedNode);
+
+                // Ensure the view is properly initialized and updated
+                if (app.activeView) {
+                    // Update the visual representation
+                    document.visual.update();
+
+                    // Fit the view to show all content
+                    app.activeView.cameraController.fitContent();
+
+                    // Force a redraw
+                    app.activeView.update();
+                }
+
+                console.log("STEP file loaded successfully");
+
+                // Save the document after STEP file is loaded
+                try {
+                    // Save to API if we have project and user IDs
+                    if (projectId && userId) {
+                        const data = document.serialize();
+                        const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+                        const file = new File([blob], `${document.name}.cd`, { type: "application/json" });
+                        const formData = new FormData();
+                        formData.append("file", file);
+
+                        await fetch(`http://37.59.205.2:8000/upload_project_files/${userId}/${projectId}`, {
+                            method: "POST",
+                            body: formData,
+                            headers: {
+                                accept: "application/json",
+                                "Cache-Control": "no-cache, no-store, must-revalidate",
+                                Pragma: "no-cache",
+                                Expires: "0",
+                            },
+                        });
+                        console.log("Document saved to API successfully");
+                    }
+                } catch (error) {
+                    console.error("Error saving document:", error);
+                }
+            } catch (error) {
+                console.error("Error loading STEP file:", error);
+                // Continue even if STEP file loading fails
+            }
+        }
 
         // Ensure the view is properly initialized
         if (app.activeView) {
             app.activeView.update();
             app.activeView.cameraController.fitContent();
         }
+
+        // Override the document's close method to prevent save prompt
+        const originalClose = document.close;
+        document.close = async function () {
+            // Call the original close method without the save prompt
+            let views = this.application.views.filter((x) => x.document === this);
+            this.application.views.remove(...views);
+            this.application.activeView = this.application.views.at(0);
+            this.application.documents.delete(this);
+            PubSub.default.pub("documentClosed", this);
+            this.dispose();
+        };
     }
 
     private _initSubs(app: IApplication) {

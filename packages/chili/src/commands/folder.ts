@@ -15,7 +15,7 @@ export class NewBoundary implements ICommand {
         const document = app.activeView?.document!;
         const boundary = new FolderNode(document, `Boundary${index++}`);
         document.addNode(boundary);
-        // Initialize boundary type as wall by default
-        document.boundaryTypes.set(boundary.id, "wall");
+        // Initialize boundary type as free slip wall by default
+        document.boundaryTypes.set(boundary.id, "Free slip wall");
     }
 }

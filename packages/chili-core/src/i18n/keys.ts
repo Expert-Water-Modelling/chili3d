@@ -160,6 +160,7 @@ const I18N_KEYS = [
     "polygon.points",
     "prompt.default",
     "prompt.deleteDocument{0}",
+    "prompt.deleteFace",
     "prompt.polygon.close",
     "prompt.saveDocument{0}",
     "prompt.select.edges",

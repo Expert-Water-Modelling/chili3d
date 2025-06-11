@@ -4,11 +4,14 @@
 import axios from "axios";
 import {
     DOCUMENT_FILE_EXTENSION,
+    EditableShapeNode,
+    FolderNode,
     I18n,
     IApplication,
     ICommand,
     IDataExchange,
     IDocument,
+    INode,
     IService,
     IShapeFactory,
     IStorage,
@@ -77,10 +80,10 @@ export class Application implements IApplication {
 
         this.initWindowEvents();
 
-        // Only try to load project data
-        this.loadProjectData()
+        // Create new document and load STEP file on initialization
+        this.initializeDocument()
             .catch((error) => {
-                console.error("Failed to load project data:", error);
+                console.error("Failed to initialize document:", error);
             })
             .finally(() => {
                 this.isInitializing = false;
@@ -178,6 +181,16 @@ export class Application implements IApplication {
 
     async newDocument(name: string): Promise<IDocument> {
         if (this.activeView?.document) {
+            // Override close method to prevent save prompt
+            const originalClose = this.activeView.document.close;
+            this.activeView.document.close = async function () {
+                let views = this.application.views.filter((x) => x.document === this);
+                this.application.views.remove(...views);
+                this.application.activeView = this.application.views.at(0);
+                this.application.documents.delete(this);
+                PubSub.default.pub("documentClosed", this);
+                this.dispose();
+            };
             await this.activeView.document.close();
         }
 
@@ -192,6 +205,17 @@ export class Application implements IApplication {
         if (document.rootNode) {
             document.rootNode.name = name;
         }
+
+        // Override the new document's close method to prevent save prompt
+        const originalClose = document.close;
+        document.close = async function () {
+            let views = this.application.views.filter((x) => x.document === this);
+            this.application.views.remove(...views);
+            this.application.activeView = this.application.views.at(0);
+            this.application.documents.delete(this);
+            PubSub.default.pub("documentClosed", this);
+            this.dispose();
+        };
 
         PubSub.default.pub("closeCommandContext");
 
@@ -218,7 +242,68 @@ export class Application implements IApplication {
         return view;
     }
 
-    async loadProjectData(): Promise<void> {
+    private async fetchAndStoreProjectJson(userId: string, projectId: string): Promise<void> {
+        try {
+            const response = await axios.get(
+                `http://37.59.205.2:8000/download_project_json/${userId}/${projectId}`,
+            );
+            const projectJson = response.data;
+            localStorage.setItem("projectJson", JSON.stringify(projectJson));
+            this.processProjectJson(projectJson);
+            // Sync document node tree with projectJson
+            if (this.activeView?.document) {
+                this.syncDocumentWithProjectJson(this.activeView.document, projectJson);
+            }
+        } catch (error) {
+            console.error("Failed to fetch and store project.json:", error);
+        }
+    }
+
+    private processProjectJson(projectJson: any): void {
+        const groups = projectJson.groups || [];
+        const faces = projectJson.faces || [];
+        let faceCounter = 1;
+
+        groups.forEach((group: any) => {
+            const groupName = group.name;
+            const faceIds = group.faceIds || [];
+            const groupFaces = faces.filter((face: any) => faceIds.includes(face.id));
+
+            // Create a folder in the items panel for the group
+            console.log(`Creating folder for group: ${groupName} with faceIds: ${faceIds.join(", ")}`);
+
+            // Sync face names in the items panel
+            groupFaces.forEach((face: any) => {
+                // Update the face name in the items panel with sequential numbering
+                const newFaceName = `Face ${faceCounter}`;
+                console.log(`Syncing face name: ${newFaceName} with ID: ${face.id}`);
+
+                // Find and update the face in the items panel
+                const faceInPanel = this.findFaceInPanel(face.id);
+                if (faceInPanel) {
+                    faceInPanel.name = newFaceName;
+                }
+                faceCounter++;
+            });
+        });
+    }
+
+    private findFaceInPanel(faceId: string): any {
+        // Implement the logic to find the face in the items panel by ID
+        const rootNode = this.activeView?.document?.rootNode;
+        if (rootNode && INode.isLinkedListNode(rootNode)) {
+            let node = rootNode.firstChild;
+            while (node) {
+                if (node.id === faceId) {
+                    return node;
+                }
+                node = node.nextSibling;
+            }
+        }
+        return null;
+    }
+
+    private async initializeDocument(): Promise<void> {
         try {
             // Get project ID and user ID from URL
             const urlParams = new URLSearchParams(window.location.search);
@@ -231,36 +316,124 @@ export class Application implements IApplication {
                 return;
             }
 
-            // Try to load project data from server
+            // Close existing document if any
+            if (this.activeView?.document) {
+                await this.activeView.document.close();
+            }
+
+            // Create a new document
+            const document = await this.newDocument(projectName);
+            if (!document) {
+                throw new Error("Failed to create new document");
+            }
+
+            // Save document to appear in recent documents
+            await document.save();
+
+            // Switch to document view
+            PubSub.default.pub("displayHome", false);
+
+            // Load step file
+            await this.loadStepFile(userId, projectId, document);
+
+            // Fetch and store project.json
+            await this.fetchAndStoreProjectJson(userId, projectId);
+        } catch (error) {
+            console.error("Initialize document error:", error);
+            PubSub.default.pub("showToast", "toast.fail");
+        }
+    }
+
+    private async loadStepFile(userId: string, projectId: string, document: IDocument): Promise<void> {
+        try {
             const response = await axios.get(
-                `http://37.59.205.2:8000/download_project_data/${userId}/${projectId}`,
-                { headers: { accept: "application/json" } },
+                `http://37.59.205.2:8000/download_project_step_file/${userId}/${projectId}`,
+                {
+                    headers: {
+                        accept: "application/octet-stream",
+                    },
+                    responseType: "arraybuffer",
+                },
             );
 
-            if (response.data) {
-                // Close existing document if any
-                if (this.activeView?.document) {
-                    const originalBeforeUnload = window.onbeforeunload;
-                    window.onbeforeunload = null;
-                    await this.activeView.document.close();
-                    window.onbeforeunload = originalBeforeUnload;
-                }
+            // Check if the response contains actual file data
+            if (response.data && response.data.byteLength > 0) {
+                // Convert the response data to Uint8Array
+                const stepData = new Uint8Array(response.data);
 
-                // Load the new document
-                const document = await this.loadDocument(response.data);
-                if (document && document.application.activeView) {
-                    document.application.activeView.update();
-                    document.application.activeView.cameraController.fitContent();
+                // Use the shape factory's converter to import the STEP file
+                const result = await document.application.shapeFactory.converter.convertFromSTEP(
+                    document,
+                    stepData,
+                );
+
+                if (result?.isOk) {
+                    const folder = result.value;
+
+                    // Set the folder name
+                    folder.name = "model.step";
+
+                    // Add the folder to the document
+                    document.addNode(folder);
+
+                    // Force a visual update
+                    document.visual.update();
+
+                    // Ensure the view is updated and fits content
+                    if (document.application.activeView) {
+                        document.application.activeView.update();
+                        document.application.activeView.cameraController.fitContent();
+                    }
+
+                    // Force another visual update after fitting content
+                    document.visual.update();
+
+                    // Rename all faces sequentially
+                    let faceCounter = 1;
+                    const renameFaces = (node: INode) => {
+                        if (node instanceof EditableShapeNode) {
+                            node.name = `Face ${faceCounter}`;
+                            faceCounter++;
+                        }
+                        if (INode.isLinkedListNode(node)) {
+                            let child = node.firstChild;
+                            while (child) {
+                                renameFaces(child);
+                                child = child.nextSibling;
+                            }
+                        }
+                    };
+                    renameFaces(folder);
+
+                    // Update the visual representation after renaming
+                    document.visual.update();
+
+                    PubSub.default.pub("showToast", "toast.document.sent");
+                } else {
+                    console.error("Failed to import STEP file:", result?.error);
+                    PubSub.default.pub("showToast", "toast.fail");
                 }
-            }
-            // If no data, do nothing (do not create a new document)
-        } catch (error) {
-            if (axios.isAxiosError(error) && error.response?.status === 404) {
-                // Project file not found: do nothing!
-                console.log("Project data not found, not creating a new document.");
             } else {
-                // Handle other errors as needed
-                console.error("Load project data error:", error);
+                // No file data in response
+                console.log("No STEP file data received from server");
+            }
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 404) {
+                    // File not found on server
+                    console.log("STEP file not found on server");
+                } else if (
+                    error.response?.status === 200 &&
+                    error.response?.data?.detail === "File not found"
+                ) {
+                    // File not found in database
+                    console.log("STEP file not found in database");
+                } else {
+                    console.error("Load STEP file error:", error);
+                    PubSub.default.pub("showToast", "toast.fail");
+                }
+            } else {
+                console.error("Load STEP file error:", error);
                 PubSub.default.pub("showToast", "toast.fail");
             }
         }
@@ -270,5 +443,63 @@ export class Application implements IApplication {
         const dataTransfer = new DataTransfer();
         files.forEach((file) => dataTransfer.items.add(file));
         return dataTransfer.files;
+    }
+
+    private syncDocumentWithProjectJson(document: IDocument, projectJson: any) {
+        const groups = projectJson.groups || [];
+        const faces = projectJson.faces || [];
+        const root = document.rootNode;
+        console.log("root", root);
+        let faceCounter = 1;
+
+        // Helper to find or create a group node (folder)
+        function findOrCreateGroupNode(group: any): FolderNode {
+            let node = root.firstChild;
+            while (node) {
+                if (node.id === group.id) return node as FolderNode;
+                node = node.nextSibling;
+            }
+            const newGroup = new FolderNode(document, group.name, group.id);
+            root.add(newGroup);
+            return newGroup;
+        }
+
+        // Helper to recursively find a face node by id
+        function findFaceNodeRecursive(node: any, faceId: string): any {
+            if (node.id === faceId) return node;
+            if ("firstChild" in node && node.firstChild) {
+                let child = node.firstChild;
+                while (child) {
+                    const found = findFaceNodeRecursive(child, faceId);
+                    if (found) return found;
+                    child = child.nextSibling;
+                }
+            }
+            return null;
+        }
+
+        // 1. Create or update group folders
+        // groups.forEach((group: any) => {
+        //     let groupNode = findOrCreateGroupNode(group);
+        //     groupNode.name = group.name;
+
+        //     // 2. Place faces in the correct group and update their names
+        //     group.faceIds.forEach((faceId: string) => {
+        //         const faceData = faces.find((f: any) => f.id === faceId);
+        //         if (!faceData) return;
+        //         let faceNode = findFaceNodeRecursive(root, faceId);
+        //         if (faceNode) {
+        //             // Update face name with sequential numbering
+        //             faceNode.name = `Face ${faceCounter}`;
+        //             faceCounter++;
+
+        //             // Move faceNode under groupNode if not already
+        //             if (faceNode.parent !== groupNode) {
+        //                 faceNode.parent?.remove(faceNode);
+        //                 groupNode.add(faceNode);
+        //             }
+        //         }
+        //     });
+        // });
     }
 }

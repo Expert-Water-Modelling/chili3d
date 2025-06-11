@@ -162,6 +162,7 @@ export default {
         "polygon.points": "点",
         "prompt.default": "鼠标中键平移视图，Shift + 中键旋转视图，中键滚动缩放视图",
         "prompt.deleteDocument{0}": "是否删除 {0} ？",
+        "prompt.deleteFace": "删除面",
         "prompt.polygon.close": "闭合",
         "prompt.saveDocument{0}": "是否保存对 {0} 的更改？",
         "prompt.select.edges": "请选择边",

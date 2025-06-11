@@ -212,6 +212,8 @@ ShapeNode initGroupNode(const TopoDS_Shape &shape, const Handle_XCAFDoc_ShapeToo
 
 ShapeNode parseShape(TopoDS_Shape &shape, const Handle_XCAFDoc_ShapeTool &shapeTool, const Handle_XCAFDoc_ColorTool &colorTool)
 {
+    static int faceCounter = 1;  // Static counter to maintain sequence across all shapes
+
     if (shape.ShapeType() == TopAbs_COMPOUND || shape.ShapeType() == TopAbs_COMPSOLID)
     {
         auto node = initGroupNode(shape, shapeTool);
@@ -233,6 +235,8 @@ ShapeNode parseShape(TopoDS_Shape &shape, const Handle_XCAFDoc_ShapeTool &shapeT
         {
             TopoDS_Face face = TopoDS::Face(explorer.Current());
             auto faceNode = initShapeNode(face, shapeTool, colorTool);
+            // Set sequential name for the face
+            faceNode.name = "Face " + std::to_string(faceCounter++);
             node.children.push_back(faceNode);
             explorer.Next();
         }

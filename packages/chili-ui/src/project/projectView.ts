@@ -41,6 +41,7 @@ export class ProjectView extends HTMLElement {
             ),
             this.panel,
         );
+        this.syncItemsPanelWithProjectJson();
     }
 
     activeTree() {
@@ -72,6 +73,33 @@ export class ProjectView extends HTMLElement {
             this.panel.append(tree);
         }
     };
+
+    private syncItemsPanelWithProjectJson() {
+        const projectJson = localStorage.getItem("projectJson");
+        if (projectJson) {
+            const data = JSON.parse(projectJson);
+            const groups = data.groups || [];
+            const faces = data.faces || [];
+
+            // groups.forEach((group: any) => {
+            //     const groupName = group.name;
+            //     const faceIds = group.faceIds || [];
+            //     const groupFaces = faces.filter((face: any) => faceIds.includes(face.id));
+
+            //     // Create a folder in the items panel for the group
+            //     console.log(`Creating folder for group: ${groupName} with faceIds: ${faceIds.join(', ')}`);
+            //     // Here you would implement the logic to create the folder in the items panel
+            //     // and add the faces to that folder.
+
+            //     // Sync face names in the items panel
+            //     groupFaces.forEach((face: any) => {
+            //         // Update the face name in the items panel
+            //         console.log(`Syncing face name: ${face.name} with ID: ${face.id}`);
+            //         // Here you would implement the logic to update the face name in the items panel
+            //     });
+            // });
+        }
+    }
 }
 
 customElements.define("chili-project-view", ProjectView);

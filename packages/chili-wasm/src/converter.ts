@@ -107,14 +107,15 @@ export class OccShapeConverter implements IShapeConverter {
         const mainFolder = result.value;
 
         // Collect all faces and add them directly to the main folder
+        let faceCounter = 1;
         const collectFaces = (node: INode) => {
             if (node instanceof EditableShapeNode && node.shape instanceof OccShape) {
                 // Get all sub-shapes (faces) from the geometry
                 const subShapes = node.shape.iterShape();
                 if (subShapes.length > 0) {
                     // Add each face as a separate node directly to the main folder
-                    subShapes.forEach((subShape, index) => {
-                        const faceName = `Face_${index + 1}`;
+                    subShapes.forEach((subShape) => {
+                        const faceName = `Face ${faceCounter}`;
                         const faceNode = new EditableShapeNode(
                             document,
                             faceName,
@@ -122,6 +123,7 @@ export class OccShapeConverter implements IShapeConverter {
                             node.materialId,
                         );
                         mainFolder.add(faceNode);
+                        faceCounter++;
                     });
                 }
             }

@@ -92,10 +92,12 @@ export class Selection implements ISelection, IDisposable {
         return this._selectedNodes;
     }
 
-    setSelection(nodes: INode[], toggle: boolean) {
-        nodes = nodes.filter(this.shapeNodeFilter);
+    setSelection(nodes: INode[], toggle: boolean): number {
         if (toggle) {
-            this.toggleSelectPublish(nodes, true);
+            const toAdd = nodes.filter((m) => !this._selectedNodes.includes(m));
+            const toRemove = nodes.filter((m) => this._selectedNodes.includes(m));
+            this.removeSelectedPublish(toRemove, false);
+            this.addSelectPublish(toAdd, true);
         } else {
             this.removeSelectedPublish(this._selectedNodes, false);
             this.addSelectPublish(nodes, true);

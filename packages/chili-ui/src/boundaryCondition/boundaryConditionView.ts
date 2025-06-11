@@ -5,12 +5,12 @@ import { I18n, IDocument, INode, PubSub } from "chili-core";
 import { div } from "../components";
 import style from "./boundaryConditionView.module.css";
 
-type BoundaryType = "inlet" | "outlet" | "wall" | "symmetry";
+type BoundaryType = "Velocity inlet" | "Velocity outlet" | "Pressure outlet" | "Free Slip Wall";
 
 export class BoundaryConditionView extends HTMLElement {
     private readonly panel = div({ className: style.panel });
     private currentFolder: INode | null = null;
-    private selectedType: BoundaryType = "wall";
+    private selectedType: BoundaryType = "Free Slip Wall";
     // Use the document's boundaryTypes map for persistence
     private get boundaryTypes(): Map<string, BoundaryType> {
         return ((this.currentFolder as any)?.document as any).boundaryTypes;
@@ -79,10 +79,10 @@ export class BoundaryConditionView extends HTMLElement {
 
         // Create and append options
         const options = [
-            { value: "inlet", text: "Inlet" },
-            { value: "outlet", text: "Outlet" },
-            { value: "wall", text: "Wall" },
-            { value: "symmetry", text: "Symmetry" },
+            { value: "Velocity inlet", text: "Velocity inlet" },
+            { value: "Velocity outlet", text: "Velocity outlet" },
+            { value: "Pressure outlet", text: "Pressure outlet" },
+            { value: "Free Slip Wall", text: "Free Slip Wall" },
         ];
 
         options.forEach((opt) => {
