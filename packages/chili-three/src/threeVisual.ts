@@ -6,8 +6,8 @@ import { NodeSelectionHandler } from "chili-vis";
 import { AmbientLight, AxesHelper, Object3D, Scene } from "three";
 import { ThreeHighlighter } from "./threeHighlighter";
 import { ThreeView } from "./threeView";
-import { ThreeVisualContext } from "./threeVisualContext";
 import { ThreeViewHandler } from "./threeViewEventHandler";
+import { ThreeVisualContext } from "./threeVisualContext";
 
 Object3D.DEFAULT_UP.set(0, 0, 1);
 

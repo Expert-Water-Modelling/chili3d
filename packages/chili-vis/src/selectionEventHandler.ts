@@ -34,6 +34,9 @@ interface SelectionRect {
 export abstract class SelectionHandler implements IEventHandler {
     protected rect?: SelectionRect;
     protected mouse = { isDown: false, x: 0, y: 0 };
+    private _lastClickTime: number = 0;
+    private _lastClickX: number = 0;
+    private _lastClickY: number = 0;
 
     constructor(
         readonly document: IDocument,
@@ -57,6 +60,12 @@ export abstract class SelectionHandler implements IEventHandler {
     protected abstract select(view: IView, event: PointerEvent): number;
 
     protected abstract highlightNext(view: IView): void;
+
+    // New method for double-click handling that subclasses can override
+    protected onDoubleClick(view: IView, event: PointerEvent): void {
+        // Default implementation does nothing
+        // Subclasses can override this to handle double-clicks
+    }
 
     pointerDown(view: IView, event: PointerEvent): void {
         event.preventDefault();
@@ -96,10 +105,32 @@ export abstract class SelectionHandler implements IEventHandler {
         if (this.mouse.isDown && event.button === 0) {
             this.mouse.isDown = false;
             this.removeRect(view);
-            const count = this.select(view, event);
-            this.cleanHighlights();
-            view.update();
-            if (count > 0 && !this.multiMode) this.controller?.success();
+
+            // Check for double-click
+            const currentTime = Date.now();
+            const timeDiff = currentTime - this._lastClickTime;
+            const distance = Math.sqrt(
+                Math.pow(event.offsetX - this._lastClickX, 2) +
+                    Math.pow(event.offsetY - this._lastClickY, 2),
+            );
+
+            // Double-click detection: within 300ms and within 10 pixels
+            if (timeDiff < 300 && distance < 10) {
+                // Double-click detected
+                this.onDoubleClick(view, event);
+                this._lastClickTime = 0; // Reset to prevent triple-click
+            } else {
+                // Single click - normal selection
+                const count = this.select(view, event);
+                this.cleanHighlights();
+                view.update();
+                if (count > 0 && !this.multiMode) this.controller?.success();
+
+                // Store click info for potential double-click
+                this._lastClickTime = currentTime;
+                this._lastClickX = event.offsetX;
+                this._lastClickY = event.offsetY;
+            }
         }
     }
 

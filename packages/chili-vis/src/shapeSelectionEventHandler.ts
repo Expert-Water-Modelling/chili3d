@@ -32,6 +32,24 @@ export class SubshapeSelectionHandler extends ShapeSelectionHandler {
         return this._shapes.size;
     }
 
+    protected override onDoubleClick(view: IView, event: PointerEvent): void {
+        // On double-click, select the highlighted face and complete the selection
+        if (this._highlights && this._highlights.length > 0) {
+            // Clear any existing selection
+            this.clearSelected(view.document.visual.document);
+
+            // Select the highlighted face
+            this._highlights.forEach(this.addSelected.bind(this));
+
+            // Clean up highlights
+            this.cleanHighlights();
+            view.update();
+
+            // Complete the selection process
+            this.controller?.success();
+        }
+    }
+
     private removeSelected(shape: VisualShapeData) {
         this._shapes.delete(shape);
         shape.owner.geometryNode.document.visual.highlighter.removeState(

@@ -2,6 +2,24 @@
     position: relative;
 }
 
+/* Disable text selection and selection rectangles during rotation */
+.root.rotating {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide selection rectangles during rotation */
+.root.rotating * {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+}
+
 .viewControls {
     position: absolute;
     height: 100%;

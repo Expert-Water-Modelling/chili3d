@@ -140,28 +140,85 @@ export class Viewport extends HTMLElement {
         this._eventCaches.length = 0;
     }
 
+    private shouldShowSelectionRectangle(event: PointerEvent): boolean {
+        // Only show selection rectangle when Ctrl is pressed AND dragging
+        return event.ctrlKey && event.buttons === 1;
+    }
+
+    private shouldAllowFaceSelection(event: PointerEvent): boolean {
+        // Allow face selection when:
+        // 1. Not showing selection rectangle (not Ctrl+drag)
+        // 2. Mouse is over a selectable object (not empty space)
+        const isSelectionRectangle = this.shouldShowSelectionRectangle(event);
+        const isOverObject = this.view.detectVisual(event.offsetX, event.offsetY).length > 0;
+
+        // Allow face selection when not showing selection rectangle AND over an object
+        return !isSelectionRectangle && isOverObject;
+    }
+
+    private shouldAllowCommandEvents(event: PointerEvent): boolean {
+        // Allow command events when:
+        // 1. Not showing selection rectangle (not Ctrl+drag)
+        // 2. A command is currently executing
+        const isSelectionRectangle = this.shouldShowSelectionRectangle(event);
+        const hasExecutingCommand = this.view.document.application.executingCommand !== undefined;
+
+        // Allow command events when not showing selection rectangle AND a command is executing
+        return !isSelectionRectangle && hasExecutingCommand;
+    }
+
     private readonly pointerMove = (view: IView, event: PointerEvent) => {
         if (this._flyout) {
             this._flyout.style.top = event.offsetY + "px";
             this._flyout.style.left = event.offsetX + "px";
         }
-        view.document.visual.eventHandler.pointerMove(view, event);
+
+        // Call eventHandler for face selection when not rotating
+        if (this.shouldAllowFaceSelection(event)) {
+            view.document.visual.eventHandler.pointerMove(view, event);
+        }
+        // Call eventHandler for commands when a command is executing
+        if (this.shouldAllowCommandEvents(event)) {
+            view.document.visual.eventHandler.pointerMove(view, event);
+        }
         view.document.visual.viewHandler.pointerMove(view, event);
     };
 
     private readonly pointerDown = (view: IView, event: PointerEvent) => {
         view.document.application.activeView = view;
-        view.document.visual.eventHandler.pointerDown(view, event);
+
+        // Call eventHandler for face selection when not rotating
+        if (this.shouldAllowFaceSelection(event)) {
+            view.document.visual.eventHandler.pointerDown(view, event);
+        }
+        // Call eventHandler for commands when a command is executing
+        if (this.shouldAllowCommandEvents(event)) {
+            view.document.visual.eventHandler.pointerDown(view, event);
+        }
         view.document.visual.viewHandler.pointerDown(view, event);
     };
 
     private readonly pointerUp = (view: IView, event: PointerEvent) => {
-        view.document.visual.eventHandler.pointerUp(view, event);
+        // Call eventHandler for face selection when not rotating
+        if (this.shouldAllowFaceSelection(event)) {
+            view.document.visual.eventHandler.pointerUp(view, event);
+        }
+        // Call eventHandler for commands when a command is executing
+        if (this.shouldAllowCommandEvents(event)) {
+            view.document.visual.eventHandler.pointerUp(view, event);
+        }
         view.document.visual.viewHandler.pointerUp(view, event);
     };
 
     private readonly pointerOut = (view: IView, event: PointerEvent) => {
-        view.document.visual.eventHandler.pointerOut?.(view, event);
+        // Call eventHandler for face selection when not rotating
+        if (this.shouldAllowFaceSelection(event)) {
+            view.document.visual.eventHandler.pointerOut?.(view, event);
+        }
+        // Call eventHandler for commands when a command is executing
+        if (this.shouldAllowCommandEvents(event)) {
+            view.document.visual.eventHandler.pointerOut?.(view, event);
+        }
         view.document.visual.viewHandler.pointerOut?.(view, event);
     };
 

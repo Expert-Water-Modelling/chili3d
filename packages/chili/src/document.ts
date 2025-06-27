@@ -161,7 +161,7 @@ export class Document extends Observable implements IDocument {
                 formData.append("file", file);
 
                 await axios.post(
-                    `http://37.59.205.2:8000/upload_project_files/${userId}/${projectId}?t=${timestamp}`,
+                    `http://localhost:8000/upload_project_files/${userId}/${projectId}?t=${timestamp}`,
                     formData,
                     {
                         headers: {
@@ -227,7 +227,7 @@ export class Document extends Observable implements IDocument {
                     // Get fresh data from API with timestamp to prevent caching
                     const timestamp = Date.now();
                     const response = await axios.get(
-                        `http://37.59.205.2:8000/download_project_data/${userId}/${projectId}?t=${timestamp}`,
+                        `http://localhost:8000/download_project_data/${userId}/${projectId}?t=${timestamp}`,
                         {
                             headers: {
                                 accept: "application/json",
