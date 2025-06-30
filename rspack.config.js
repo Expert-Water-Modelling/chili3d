@@ -65,6 +65,10 @@ const config = defineConfig({
                         ignore: ["**/**/index.html"],
                     },
                 },
+                {
+                    from: "./packages/chili-wasm/lib/chili-wasm.wasm",
+                    to: "chili-wasm.wasm",
+                },
             ],
         }),
         new rspack.DefinePlugin({
