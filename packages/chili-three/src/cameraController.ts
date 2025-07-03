@@ -20,7 +20,7 @@ import { ThreeVisualObject } from "./threeVisualObject";
 
 const DEG_TO_RAD = Math.PI / 180.0;
 const ZOOM_SPEED_FACTOR = 0.1;
-const ROTATE_SPEED = 0.01;
+const ROTATE_SPEED = 0.003;
 const PAN_SPEED_FACTOR = 0.002;
 const CAMERA_FOV = 50;
 const CAMERA_NEAR = 0.1;
