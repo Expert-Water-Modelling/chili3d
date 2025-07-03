@@ -318,6 +318,18 @@ export class Viewport extends HTMLElement {
                     console.log("[DEBUG] executeCommand published");
                 },
             });
+
+            // Add Delete option when faces are selected
+            console.log("[DEBUG] Adding Delete option");
+            menuItems.push({
+                id: "delete",
+                label: "command.delete",
+                onClick: () => {
+                    console.log("[DEBUG] Delete Faces clicked, publishing executeCommand");
+                    PubSub.default.pub("executeCommand", "modify.delete");
+                    console.log("[DEBUG] executeCommand published for delete");
+                },
+            });
         }
 
         // Always show "Show All" option if there are hidden faces
