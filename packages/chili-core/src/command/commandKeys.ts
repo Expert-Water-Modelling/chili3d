@@ -58,6 +58,8 @@ const COMMAND_KEYS = [
     "modify.trim",
     "special.last",
     "test.performace",
+    "visibility.hideFaces",
+    "visibility.showAllFaces",
     "workingPlane.alignToPlane",
     "workingPlane.fromSection",
     "workingPlane.set",

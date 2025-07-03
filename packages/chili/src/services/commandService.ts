@@ -40,14 +40,20 @@ export class CommandService implements IService {
     };
 
     private readonly executeCommand = async (commandName: CommandKeys) => {
+        console.log("[DEBUG] CommandService.executeCommand called with:", commandName);
         const command = commandName === "special.last" ? this._lastCommand : commandName;
-        if (!command || !(await this.canExecute(command))) return;
+        if (!command || !(await this.canExecute(command))) {
+            console.log("[DEBUG] Command cannot be executed:", command);
+            return;
+        }
 
         Logger.info(`executing command ${command}`);
+        console.log("[DEBUG] About to execute command:", command);
 
         // Only check for active view if it's not an application command
         if (!ApplicationCommands.includes(command) && !this.app.activeView) {
             Logger.error("No active view for command execution");
+            console.log("[DEBUG] No active view for command execution");
             return;
         }
 
@@ -79,25 +85,32 @@ export class CommandService implements IService {
     }
 
     private async checking(commandName: CommandKeys) {
+        console.log("[DEBUG] CommandService.checking called with:", commandName);
         if (!Command.get(commandName)) {
             Logger.error(`Can not find ${commandName} command`);
+            console.log("[DEBUG] Command not found:", commandName);
             return false;
         }
         if (!ApplicationCommands.includes(commandName) && this.app.activeView === undefined) {
             Logger.error("No active document");
+            console.log("[DEBUG] No active document");
             return false;
         }
         if (!this.app.executingCommand) {
+            console.log("[DEBUG] Command can be executed");
             return true;
         }
         if (Command.getData(this.app.executingCommand)?.name === commandName) {
             PubSub.default.pub("showToast", "toast.command.{0}excuting", commandName);
+            console.log("[DEBUG] Command is already executing");
             return false;
         }
         if (ICommand.isCancelableCommand(this.app.executingCommand)) {
             await this.app.executingCommand.cancel();
+            console.log("[DEBUG] Canceled previous command");
             return true;
         }
+        console.log("[DEBUG] Command cannot be executed due to executing command");
         return false;
     }
 }
