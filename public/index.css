@@ -25,7 +25,11 @@ body {
     --title-checked: #ffffff;
     --statusbar-foreground-color: #333;
     --statusbar-background-color: #eeeeee;
-    --viewport-background-color: #888;
+    --viewport-background-color: linear-gradient(
+        168deg,
+        rgba(100, 182, 247, 0.15) 0%,
+        rgb(255, 255, 255) 100%
+    );
 }
 
 :root[theme="dark"] {
