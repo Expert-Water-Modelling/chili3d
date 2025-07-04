@@ -2,6 +2,7 @@
 // See LICENSE file in the project root for full license information.
 
 const I18N_KEYS = [
+    "app.checkStateChanges",
     "arc.angle",
     "arc.start",
     "axis.x",

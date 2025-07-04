@@ -25,9 +25,18 @@ import {
     Serialized,
 } from "chili-core";
 import { Document } from "./document";
+import { StateChangeDetector, StateChangeResult } from "./stateChangeDetector";
 import { importFiles } from "./utils";
 
 let app: Application | undefined;
+
+// Global function to get the application instance
+export function getApplication(): Application | undefined {
+    return app;
+}
+
+// Make the getter function globally accessible
+(window as any).getApplication = getApplication;
 
 export interface ApplicationOptions {
     visualFactory: IVisualFactory;
@@ -62,12 +71,17 @@ export class Application implements IApplication {
     }
 
     private isInitializing: boolean = true;
+    public stateChangeDetector: StateChangeDetector = new StateChangeDetector();
 
     constructor(option: ApplicationOptions) {
         if (app !== undefined) {
             throw new Error("Only one application can be created");
         }
         app = this;
+
+        // Make the app instance globally accessible
+        (window as any).app = this;
+
         this.visualFactory = option.visualFactory;
         this.shapeFactory = option.shapeFactory;
         this.services = option.services;
@@ -338,6 +352,21 @@ export class Application implements IApplication {
 
             // Fetch and store project.json
             await this.fetchAndStoreProjectJson(userId, projectId);
+
+            // Wait for document to be fully stable before creating snapshot
+            console.log("Waiting for document to stabilize before creating snapshot...");
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds for any async operations
+
+            // Force a final visual update to ensure everything is settled
+            if (document.application.activeView) {
+                document.application.activeView.update();
+                document.visual.update();
+            }
+
+            // Create initial state snapshot after document is fully loaded and stable
+            console.log("Creating initial state snapshot...");
+            this.createInitialStateSnapshot();
+            console.log("Application initialization completed with state snapshot created");
         } catch (error) {
             console.error("Initialize document error:", error);
             PubSub.default.pub("showToast", "toast.fail");
@@ -501,5 +530,33 @@ export class Application implements IApplication {
         //         }
         //     });
         // });
+    }
+
+    /**
+     * Creates an initial snapshot of the current document state
+     */
+    createInitialStateSnapshot(): void {
+        if (this.activeView?.document) {
+            this.stateChangeDetector.createInitialSnapshot(this.activeView.document);
+        }
+    }
+
+    /**
+     * Checks for changes and shows dialog if needed
+     */
+    async checkForStateChanges(): Promise<StateChangeResult> {
+        if (this.activeView?.document) {
+            return await this.stateChangeDetector.checkForChanges(this.activeView.document);
+        }
+        return "no_changes";
+    }
+
+    /**
+     * Resets the state snapshot (useful after saving)
+     */
+    resetStateSnapshot(): void {
+        if (this.activeView?.document) {
+            this.stateChangeDetector.resetSnapshot(this.activeView.document);
+        }
     }
 }

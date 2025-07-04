@@ -2,6 +2,7 @@
 // See LICENSE file in the project root for full license information.
 
 const COMMAND_KEYS = [
+    "app.checkStateChanges",
     "boolean.common",
     "boolean.cut",
     "boolean.fuse",

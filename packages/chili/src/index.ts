@@ -9,5 +9,6 @@ export * from "./document";
 export * from "./editEventHandler";
 export * from "./services";
 export * from "./snap";
+export * from "./stateChangeDetector";
 export * from "./step";
 export * from "./utils";

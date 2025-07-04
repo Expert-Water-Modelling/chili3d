@@ -239,5 +239,6 @@ export default {
         "toast.document.reset": "Document has been reset",
         "command.newBoundary": "New Boundary",
         "items.tool.newBoundary": "New Boundary",
+        "app.checkStateChanges": "Check State Changes",
     },
 } satisfies Locale;

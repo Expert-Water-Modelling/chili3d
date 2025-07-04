@@ -11,6 +11,10 @@ import { IShapeFactory } from "./shape";
 import { IWindow } from "./ui/window";
 import { IView, IVisualFactory } from "./visual";
 
+// Import the StateChangeResult type from the chili package
+// This is a forward declaration - the actual type is defined in chili/src/stateChangeDetector.ts
+export type StateChangeResult = "success" | "no_changes";
+
 export interface IApplication {
     readonly mainWindow?: IWindow;
     readonly dataExchange: IDataExchange;
@@ -25,4 +29,7 @@ export interface IApplication {
     newDocument(name: string): Promise<IDocument>;
     openDocument(id: string): Promise<IDocument | undefined>;
     loadDocument(data: Serialized): Promise<IDocument | undefined>;
+    createInitialStateSnapshot(): void;
+    checkForStateChanges(): Promise<StateChangeResult>;
+    resetStateSnapshot(): void;
 }

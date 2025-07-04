@@ -237,5 +237,6 @@ export default {
         "toast.document.reset": "文档已重置",
         "command.newBoundary": "新建边界",
         "items.tool.newBoundary": "新建边界",
+        "app.checkStateChanges": "检查状态变化",
     },
 } satisfies Locale;
