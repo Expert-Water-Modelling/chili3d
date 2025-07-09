@@ -10,7 +10,7 @@ import { command, IApplication, ICommand, PubSub } from "chili-core";
     icon: "icon-import",
 })
 export class LoadProjectData implements ICommand {
-    private readonly API_BASE_URL = "http://37.59.205.2:8000";
+    private readonly API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
 
     async execute(app: IApplication): Promise<void> {
         try {

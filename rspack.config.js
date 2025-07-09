@@ -2,6 +2,20 @@ const rspack = require("@rspack/core");
 const { defineConfig } = require("@rspack/cli");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 const settings = require("./settings.json");
+const fs = require("fs");
+const path = require("path");
+
+// Load environment variables from .env file
+const envPath = path.resolve(__dirname, ".env");
+let apiBaseUrl = "http://localhost:8000"; // default value
+
+if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, "utf8");
+    const apiMatch = envContent.match(/API_BASE_URL=(.+)/);
+    if (apiMatch) {
+        apiBaseUrl = apiMatch[1].trim();
+    }
+}
 
 const config = defineConfig({
     entry: {
@@ -74,6 +88,7 @@ const config = defineConfig({
         new rspack.DefinePlugin({
             __APP_VERSION__: JSON.stringify(require("./package.json").version),
             __DOCUMENT_VERSION__: JSON.stringify(settings.documentVersion),
+            "process.env.API_BASE_URL": JSON.stringify(apiBaseUrl),
         }),
         new rspack.HtmlRspackPlugin({
             template: "./public/index.html",

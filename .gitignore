@@ -5,3 +5,4 @@ coverage
 .VSCodeCounter
 .DS_Store
 CMakeUserPresets.json
+.env

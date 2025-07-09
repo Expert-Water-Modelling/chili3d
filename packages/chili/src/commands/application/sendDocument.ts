@@ -9,7 +9,7 @@ declare const wasm: any;
 // Define the environment variable type
 declare global {
     interface ProcessEnv {
-        API_URL?: string;
+        API_BASE_URL?: string;
     }
 }
 
@@ -19,8 +19,8 @@ declare global {
     icon: "icon-export",
 })
 export class SendDocument implements ICommand {
-    // Define the API base URL as a constant
-    private readonly API_BASE_URL = "http://37.59.205.2:8000";
+    // Get the API base URL from environment variable
+    private readonly API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
 
     async execute(app: IApplication): Promise<void> {
         if (!app.activeView?.document) return;

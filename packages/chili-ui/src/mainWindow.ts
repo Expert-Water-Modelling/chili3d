@@ -18,6 +18,9 @@ import { Home } from "./home";
 import { Permanent } from "./permanent";
 import { Toast } from "./toast";
 
+// Get the API base URL from environment variable
+const API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
+
 document.oncontextmenu = (e) => e.preventDefault();
 document.body.addEventListener("scroll", (e) => {
     document.body.scrollTop = 0;
@@ -66,7 +69,12 @@ export class MainWindow implements IWindow {
             try {
                 // Download the STEP file
                 const response = await fetch(
-                    `http://37.59.205.2:8000/download_project_step_file/${userId}/${projectId}`,
+                    `${API_BASE_URL}/download_project_step_file/${userId}/${projectId}`,
+                    {
+                        headers: {
+                            accept: "application/json",
+                        },
+                    },
                 );
                 if (!response.ok) {
                     throw new Error(`Failed to download STEP file: ${response.statusText}`);
@@ -113,7 +121,7 @@ export class MainWindow implements IWindow {
                         const formData = new FormData();
                         formData.append("file", file);
 
-                        await fetch(`http://37.59.205.2:8000/upload_project_files/${userId}/${projectId}`, {
+                        await fetch(`${API_BASE_URL}/upload_project_files/${userId}/${projectId}`, {
                             method: "POST",
                             body: formData,
                             headers: {

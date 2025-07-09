@@ -28,6 +28,9 @@ import { Document } from "./document";
 import { StateChangeDetector, StateChangeResult } from "./stateChangeDetector";
 import { importFiles } from "./utils";
 
+// Get the API base URL from environment variable
+const API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
+
 let app: Application | undefined;
 
 // Global function to get the application instance
@@ -258,8 +261,17 @@ export class Application implements IApplication {
 
     private async fetchAndStoreProjectJson(userId: string, projectId: string): Promise<void> {
         try {
+            const timestamp = Date.now();
             const response = await axios.get(
-                `http://37.59.205.2:8000/download_project_json/${userId}/${projectId}`,
+                `${API_BASE_URL}/download_project_json/${userId}/${projectId}?t=${timestamp}`,
+                {
+                    headers: {
+                        accept: "application/json",
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
+                        Pragma: "no-cache",
+                        Expires: "0",
+                    },
+                },
             );
             const projectJson = response.data;
             localStorage.setItem("projectJson", JSON.stringify(projectJson));
@@ -375,11 +387,15 @@ export class Application implements IApplication {
 
     private async loadStepFile(userId: string, projectId: string, document: IDocument): Promise<void> {
         try {
+            const timestamp = Date.now();
             const response = await axios.get(
-                `http://37.59.205.2:8000/download_project_step_file/${userId}/${projectId}`,
+                `${API_BASE_URL}/download_project_step_file/${userId}/${projectId}?t=${timestamp}`,
                 {
                     headers: {
-                        accept: "application/octet-stream",
+                        accept: "application/json",
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
+                        Pragma: "no-cache",
+                        Expires: "0",
                     },
                     responseType: "arraybuffer",
                 },
@@ -447,24 +463,34 @@ export class Application implements IApplication {
                 console.log("No STEP file data received from server");
             }
         } catch (error) {
+            console.error("=== STEP FILE DOWNLOAD ERROR ===");
             if (axios.isAxiosError(error)) {
+                console.error("Request URL:", `${API_BASE_URL}/download_project_step_file/${userId}/${projectId}`);
+                console.error("Status:", error.response?.status);
+                console.error("Status Text:", error.response?.statusText);
+                console.error("Response Headers:", error.response?.headers);
+                console.error("Response Data:", error.response?.data);
+                console.error("Error Message:", error.message);
+                console.error("Error Code:", error.code);
+                
                 if (error.response?.status === 404) {
-                    // File not found on server
-                    console.log("STEP file not found on server");
-                } else if (
-                    error.response?.status === 200 &&
-                    error.response?.data?.detail === "File not found"
-                ) {
-                    // File not found in database
-                    console.log("STEP file not found in database");
+                    console.error("STEP file not found on server (404)");
+                    PubSub.default.pub("showToast", "toast.read.error");
+                } else if (error.code === "ECONNREFUSED") {
+                    console.error("Connection refused - server may be down");
+                    PubSub.default.pub("showToast", "toast.fail");
+                } else if (error.code === "ERR_NETWORK") {
+                    console.error("Network error - possible CORS issue");
+                    PubSub.default.pub("showToast", "toast.fail");
                 } else {
                     console.error("Load STEP file error:", error);
                     PubSub.default.pub("showToast", "toast.fail");
                 }
             } else {
-                console.error("Load STEP file error:", error);
+                console.error("Non-axios error:", error);
                 PubSub.default.pub("showToast", "toast.fail");
             }
+            console.error("=== END ERROR ===");
         }
     }
 

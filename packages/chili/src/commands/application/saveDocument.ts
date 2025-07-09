@@ -36,7 +36,7 @@ declare const wasm: any;
     icon: "icon-save",
 })
 export class SaveDocument implements ICommand {
-    private readonly API_BASE_URL = "http://37.59.205.2:8000";
+    private readonly API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
 
     async execute(app: IApplication): Promise<void> {
         if (!app.activeView?.document) return;
