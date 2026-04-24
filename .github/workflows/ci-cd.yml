@@ -30,6 +30,9 @@ jobs:
               env:
                   NODE_OPTIONS: --max-old-space-size=4096
 
+            - name: Write .env for build
+              run: echo "API_BASE_URL=${{ secrets.API_BASE_URL }}" > .env
+
             - name: Build (production)
               run: npm run build
               env:
