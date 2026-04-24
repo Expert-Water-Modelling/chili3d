@@ -1,90 +1,87 @@
-name: CI/CD Pipeline for Develop Branch
+name: Chili3D CI/CD Pipeline
 
 on:
-  push:
-    branches: [ develop ]
-  pull_request:
-    branches: [ develop ]
-
-env:
-  REGISTRY: ghcr.io
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    test-and-deploy:
+        runs-on: ubuntu-latest
 
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-    - name: Set lowercase image name
-      id: image
-      run: echo "name=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "npm"
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+            - name: Install dependencies
+              run: npm ci
+              env:
+                  NODE_OPTIONS: --max-old-space-size=4096
 
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
-        tags: |
-          type=ref,event=branch
-          type=sha,prefix=develop-
-          type=raw,value=develop-latest
+            - name: Run unit tests
+              run: npm test
+              env:
+                  NODE_OPTIONS: --max-old-space-size=4096
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+            - name: Build (production)
+              run: npm run build
+              env:
+                  CI: false
+                  NODE_OPTIONS: --max-old-space-size=4096
 
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
-    
-    steps:
-    - name: Set lowercase image name
-      id: image
-      run: echo "name=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+            - name: Deploy to server
+              if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+              env:
+                  SSH_HOST: ${{ secrets.HOST }}
+                  SSH_USER: ${{ secrets.USERNAME }}
+                  SSHPASS: ${{ secrets.PASSWORD }}
+              run: |
+                  set -ex
 
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        password: ${{ secrets.PASSWORD }}
-        script: |
-          # Login to GitHub Container Registry
-          echo ${{ secrets.REGISTRY_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          
-          # Pull latest develop image
-          docker pull ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:develop-latest
-          
-          # Stop existing container
-          docker stop myapp-develop || true
-          docker rm myapp-develop || true
-          
-          # Run new container using your current configuration
-          docker run -d \
-            --name myapp-develop \
-            --restart unless-stopped \
-            -p 8080:8080 \
-            -e NODE_ENV=development \
-            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:develop-latest \
-            npm run dev
-          
-          # Clean up only old versions of this specific develop image
-          docker images ${{ env.REGISTRY }}/${{ steps.image.outputs.name }} --format "table {{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedAt}}" | grep develop | tail -n +2 | head -n -1 | awk '{print $2}' | xargs -r docker rmi || true
+                  sudo apt-get update -qq
+                  sudo apt-get install -y -qq sshpass openssh-client
+
+                  mkdir -p ~/.ssh-ctl && chmod 700 ~/.ssh-ctl
+                  CTL="$HOME/.ssh-ctl/deploy.sock"
+                  SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password -o LogLevel=ERROR -o ControlMaster=auto -o ControlPath=$CTL -o ControlPersist=10m"
+
+                  echo "=== Step 1: Open master connection ==="
+                  sshpass -e ssh $SSH_OPTS -o ConnectTimeout=15 -fN "$SSH_USER@$SSH_HOST"
+
+                  echo "=== Step 2: Verify master is responsive ==="
+                  ssh $SSH_OPTS -O check "$SSH_USER@$SSH_HOST"
+
+                  trap 'ssh $SSH_OPTS -O exit "$SSH_USER@$SSH_HOST" 2>/dev/null || true' EXIT
+
+                  echo "=== Step 3: Simple test command through master ==="
+                  ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" 'echo "ping ok"; whoami; date; df -h / | tail -1'
+
+                  echo "=== Step 4: Size of local dist/ ==="
+                  du -sh dist
+
+                  echo "=== Step 5: Stream tar of dist/ to server ==="
+                  tar -cf - dist | ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" \
+                    'cd /home/ubuntu/Projects/chili3d && rm -rf dist && tar -xf - && echo "extracted $(find dist -type f | wc -l) files"'
+
+                  echo "=== Step 6: pm2 reload ==="
+                  ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE_SCRIPT' 2>&1
+                  set -e
+                  # Bypass nvm auto-activation (default alias is missing on this server
+                  # and its init fails under set -e). Point directly at the installed
+                  # node bin directory, which also contains pm2.
+                  NODE_BIN="$HOME/.nvm/versions/node/v20.20.1/bin"
+                  [ -x "$NODE_BIN/node" ] || { echo "node not found at $NODE_BIN"; exit 1; }
+                  export PATH="$NODE_BIN:$PATH"
+
+                  echo "node: $(node -v)  pm2: $(command -v pm2)"
+                  pm2 reload chili3d
+                  REMOTE_SCRIPT
+
+                  echo "=== Done ==="
