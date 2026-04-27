@@ -44,24 +44,29 @@ jobs:
               env:
                   SSH_HOST: ${{ secrets.HOST }}
                   SSH_USER: ${{ secrets.USERNAME }}
-                  SSHPASS: ${{ secrets.PASSWORD }}
+                  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
               run: |
                   set -ex
 
                   sudo apt-get update -qq
-                  sudo apt-get install -y -qq sshpass openssh-client
+                  sudo apt-get install -y -qq openssh-client
+
+                  mkdir -p ~/.ssh && chmod 700 ~/.ssh
+                  KEY="$HOME/.ssh/id_deploy"
+                  printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY"
+                  chmod 600 "$KEY"
 
                   mkdir -p ~/.ssh-ctl && chmod 700 ~/.ssh-ctl
                   CTL="$HOME/.ssh-ctl/deploy.sock"
-                  SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password -o LogLevel=ERROR -o ControlMaster=auto -o ControlPath=$CTL -o ControlPersist=10m"
+                  SSH_OPTS="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=yes -o PasswordAuthentication=no -o PreferredAuthentications=publickey -o LogLevel=ERROR -o ControlMaster=auto -o ControlPath=$CTL -o ControlPersist=10m"
 
                   echo "=== Step 1: Open master connection ==="
-                  sshpass -e ssh $SSH_OPTS -o ConnectTimeout=15 -fN "$SSH_USER@$SSH_HOST"
+                  ssh $SSH_OPTS -o ConnectTimeout=15 -fN "$SSH_USER@$SSH_HOST"
 
                   echo "=== Step 2: Verify master is responsive ==="
                   ssh $SSH_OPTS -O check "$SSH_USER@$SSH_HOST"
 
-                  trap 'ssh $SSH_OPTS -O exit "$SSH_USER@$SSH_HOST" 2>/dev/null || true' EXIT
+                  trap 'ssh $SSH_OPTS -O exit "$SSH_USER@$SSH_HOST" 2>/dev/null || true; rm -f "$KEY"' EXIT
 
                   echo "=== Step 3: Simple test command through master ==="
                   ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" 'echo "ping ok"; whoami; date; df -h / | tail -1'
