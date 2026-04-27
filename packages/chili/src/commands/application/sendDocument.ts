@@ -2,16 +2,19 @@
 // See LICENSE file in the project root for full license information.
 
 import axios from "axios";
-import { command, gc, IApplication, ICommand, IDocument, INode, PubSub, ShapeNode } from "chili-core";
+import {
+    apiService,
+    command,
+    gc,
+    IApplication,
+    ICommand,
+    IDocument,
+    INode,
+    PubSub,
+    ShapeNode,
+} from "chili-core";
 
 declare const wasm: any;
-
-// Define the environment variable type
-declare global {
-    interface ProcessEnv {
-        API_BASE_URL?: string;
-    }
-}
 
 @command({
     name: "doc.send",
@@ -19,9 +22,6 @@ declare global {
     icon: "icon-export",
 })
 export class SendDocument implements ICommand {
-    // Get the API base URL from environment variable
-    private readonly API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
-
     async execute(app: IApplication): Promise<void> {
         if (!app.activeView?.document) return;
 
@@ -132,10 +132,10 @@ export class SendDocument implements ICommand {
             }
 
             // Send STL files to the STL upload endpoint
-            const stlApiUrl = `${this.API_BASE_URL}/upload_stl_files/${userId}/${projectId}`;
+            const stlApiUrl = `/upload_stl_files/${userId}/${projectId}`;
             console.log("Sending STL files to API:", stlApiUrl);
 
-            const stlResponse = await axios.post(stlApiUrl, stlFormData, {
+            const stlResponse = await apiService.post(stlApiUrl, stlFormData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
                     accept: "application/json",
@@ -153,10 +153,10 @@ export class SendDocument implements ICommand {
             console.log("Added mapping JSON file");
 
             // Send JSON file to the project files endpoint
-            const jsonApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
+            const jsonApiUrl = `/upload_project_files/${userId}/${projectId}`;
             console.log("Sending JSON file to API:", jsonApiUrl);
 
-            const jsonResponse = await axios.post(jsonApiUrl, jsonFormData, {
+            const jsonResponse = await apiService.post(jsonApiUrl, jsonFormData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
                     accept: "application/json",

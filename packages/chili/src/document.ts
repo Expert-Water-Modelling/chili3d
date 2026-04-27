@@ -1,8 +1,8 @@
 // Part of the Chili3d Project, under the AGPL-3.0 License.
 // See LICENSE file in the project root for full license information.
 
-import axios from "axios";
 import {
+    apiService,
     CollectionAction,
     CollectionChangedArgs,
     Constants,
@@ -30,9 +30,6 @@ import {
     Transaction,
 } from "chili-core";
 import { Selection } from "./selection";
-
-// Get the API base URL from environment variable
-const API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
 
 export class Document extends Observable implements IDocument {
     readonly visual: IVisual;
@@ -163,8 +160,8 @@ export class Document extends Observable implements IDocument {
                 const formData = new FormData();
                 formData.append("file", file);
 
-                await axios.post(
-                    `${API_BASE_URL}/upload_project_files/${userId}/${projectId}?t=${timestamp}`,
+                await apiService.post(
+                    `/upload_project_files/${userId}/${projectId}?t=${timestamp}`,
                     formData,
                     {
                         headers: {
@@ -229,8 +226,8 @@ export class Document extends Observable implements IDocument {
                 try {
                     // Get fresh data from API with timestamp to prevent caching
                     const timestamp = Date.now();
-                    const response = await axios.get(
-                        `${API_BASE_URL}/download_project_data/${userId}/${projectId}?t=${timestamp}`,
+                    const response = await apiService.get(
+                        `/download_project_data/${userId}/${projectId}?t=${timestamp}`,
                         {
                             headers: {
                                 accept: "application/json",

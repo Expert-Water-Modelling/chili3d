@@ -3,6 +3,7 @@
 
 import { getProjectNameFromUrl } from "chili";
 import {
+    apiService,
     Button,
     CommandKeys,
     I18nKeys,
@@ -17,9 +18,6 @@ import { Editor } from "./editor";
 import { Home } from "./home";
 import { Permanent } from "./permanent";
 import { Toast } from "./toast";
-
-// Get the API base URL from environment variable
-const API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
 
 document.oncontextmenu = (e) => e.preventDefault();
 document.body.addEventListener("scroll", (e) => {
@@ -68,21 +66,18 @@ export class MainWindow implements IWindow {
         if (projectId && userId) {
             try {
                 // Download the STEP file
-                const response = await fetch(
-                    `${API_BASE_URL}/download_project_step_file/${userId}/${projectId}`,
+                const response = await apiService.get<ArrayBuffer>(
+                    `/download_project_step_file/${userId}/${projectId}`,
                     {
+                        responseType: "arraybuffer",
                         headers: {
                             accept: "application/json",
                         },
                     },
                 );
-                if (!response.ok) {
-                    throw new Error(`Failed to download STEP file: ${response.statusText}`);
-                }
 
                 // Convert the response to ArrayBuffer
-                const stepData = await response.arrayBuffer();
-                const stepArray = new Uint8Array(stepData);
+                const stepArray = new Uint8Array(response.data);
 
                 // Import the STEP file into the document
                 const result = document.application.shapeFactory.converter.convertFromSTEP(
@@ -121,9 +116,7 @@ export class MainWindow implements IWindow {
                         const formData = new FormData();
                         formData.append("file", file);
 
-                        await fetch(`${API_BASE_URL}/upload_project_files/${userId}/${projectId}`, {
-                            method: "POST",
-                            body: formData,
+                        await apiService.post(`/upload_project_files/${userId}/${projectId}`, formData, {
                             headers: {
                                 accept: "application/json",
                                 "Cache-Control": "no-cache, no-store, must-revalidate",

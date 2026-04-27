@@ -3,6 +3,7 @@
 
 import axios from "axios";
 import {
+    apiService,
     command,
     gc,
     I18n,
@@ -36,8 +37,6 @@ declare const wasm: any;
     icon: "icon-save",
 })
 export class SaveDocument implements ICommand {
-    private readonly API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
-
     async execute(app: IApplication): Promise<void> {
         if (!app.activeView?.document) return;
 
@@ -77,10 +76,10 @@ export class SaveDocument implements ICommand {
                         projectFormData.append("file", projectBlob, "project.json");
 
                         // Upload project.json
-                        const projectApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}?t=${timestamp}`;
+                        const projectApiUrl = `/upload_project_files/${userId}/${projectId}?t=${timestamp}`;
                         console.log("Uploading project.json to API:", projectApiUrl);
 
-                        const projectResponse = await axios.post(projectApiUrl, projectFormData, {
+                        const projectResponse = await apiService.post(projectApiUrl, projectFormData, {
                             headers: {
                                 "Content-Type": "multipart/form-data",
                                 accept: "application/json",
@@ -100,10 +99,10 @@ export class SaveDocument implements ICommand {
                     );
 
                     // Send project data to the server
-                    const apiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
+                    const apiUrl = `/upload_project_files/${userId}/${projectId}`;
                     console.log("Saving project data to API:", apiUrl);
 
-                    const response = await axios.post(apiUrl, formData, {
+                    const response = await apiService.post(apiUrl, formData, {
                         headers: {
                             "Content-Type": "multipart/form-data",
                             accept: "application/json",
@@ -159,10 +158,10 @@ export class SaveDocument implements ICommand {
                             stepFormData.append("file", stepBlob, "model.step");
 
                             // Upload STEP file
-                            const stepApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
+                            const stepApiUrl = `/upload_project_files/${userId}/${projectId}`;
                             console.log("Sending STEP file to API:", stepApiUrl);
 
-                            const stepResponse = await axios.post(stepApiUrl, stepFormData, {
+                            const stepResponse = await apiService.post(stepApiUrl, stepFormData, {
                                 headers: {
                                     "Content-Type": "multipart/form-data",
                                     accept: "application/json",
@@ -193,10 +192,10 @@ export class SaveDocument implements ICommand {
                         glbFormData.append("file", glbBlob, "model.glb");
 
                         // Upload GLB file
-                        const glbApiUrl = `${this.API_BASE_URL}/upload_project_files/${userId}/${projectId}`;
+                        const glbApiUrl = `/upload_project_files/${userId}/${projectId}`;
                         console.log("Sending GLB file to API:", glbApiUrl);
 
-                        const glbResponse = await axios.post(glbApiUrl, glbFormData, {
+                        const glbResponse = await apiService.post(glbApiUrl, glbFormData, {
                             headers: {
                                 "Content-Type": "multipart/form-data",
                                 accept: "application/json",

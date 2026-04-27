@@ -3,6 +3,7 @@
 
 import axios from "axios";
 import {
+    apiService,
     DOCUMENT_FILE_EXTENSION,
     EditableShapeNode,
     FolderNode,
@@ -27,9 +28,6 @@ import {
 import { Document } from "./document";
 import { StateChangeDetector, StateChangeResult } from "./stateChangeDetector";
 import { importFiles } from "./utils";
-
-// Get the API base URL from environment variable
-const API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
 
 let app: Application | undefined;
 
@@ -262,8 +260,8 @@ export class Application implements IApplication {
     private async fetchAndStoreProjectJson(userId: string, projectId: string): Promise<void> {
         try {
             const timestamp = Date.now();
-            const response = await axios.get(
-                `${API_BASE_URL}/download_project_json/${userId}/${projectId}?t=${timestamp}`,
+            const response = await apiService.get(
+                `/download_project_json/${userId}/${projectId}?t=${timestamp}`,
                 {
                     headers: {
                         accept: "application/json",
@@ -388,8 +386,8 @@ export class Application implements IApplication {
     private async loadStepFile(userId: string, projectId: string, document: IDocument): Promise<void> {
         try {
             const timestamp = Date.now();
-            const response = await axios.get(
-                `${API_BASE_URL}/download_project_step_file/${userId}/${projectId}?t=${timestamp}`,
+            const response = await apiService.get(
+                `/download_project_step_file/${userId}/${projectId}?t=${timestamp}`,
                 {
                     headers: {
                         accept: "application/json",
@@ -465,14 +463,14 @@ export class Application implements IApplication {
         } catch (error) {
             console.error("=== STEP FILE DOWNLOAD ERROR ===");
             if (axios.isAxiosError(error)) {
-                console.error("Request URL:", `${API_BASE_URL}/download_project_step_file/${userId}/${projectId}`);
+                console.error("Request URL:", `/download_project_step_file/${userId}/${projectId}`);
                 console.error("Status:", error.response?.status);
                 console.error("Status Text:", error.response?.statusText);
                 console.error("Response Headers:", error.response?.headers);
                 console.error("Response Data:", error.response?.data);
                 console.error("Error Message:", error.message);
                 console.error("Error Code:", error.code);
-                
+
                 if (error.response?.status === 404) {
                     console.error("STEP file not found on server (404)");
                     PubSub.default.pub("showToast", "toast.read.error");

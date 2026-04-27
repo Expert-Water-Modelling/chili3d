@@ -2,7 +2,7 @@
 // See LICENSE file in the project root for full license information.
 
 import axios from "axios";
-import { command, IApplication, ICommand, PubSub } from "chili-core";
+import { apiService, command, IApplication, ICommand, PubSub } from "chili-core";
 
 @command({
     name: "doc.open",
@@ -10,8 +10,6 @@ import { command, IApplication, ICommand, PubSub } from "chili-core";
     icon: "icon-import",
 })
 export class LoadProjectData implements ICommand {
-    private readonly API_BASE_URL = process.env["API_BASE_URL"] || "http://localhost:8000";
-
     async execute(app: IApplication): Promise<void> {
         try {
             // Get project ID and user ID from URL
@@ -24,14 +22,11 @@ export class LoadProjectData implements ICommand {
             }
 
             // Try to load project data from server
-            const response = await axios.get(
-                `${this.API_BASE_URL}/download_project_data/${userId}/${projectId}`,
-                {
-                    headers: {
-                        accept: "application/json",
-                    },
+            const response = await apiService.get(`/download_project_data/${userId}/${projectId}`, {
+                headers: {
+                    accept: "application/json",
                 },
-            );
+            });
 
             if (response.data) {
                 // If we have data, load it into the application
