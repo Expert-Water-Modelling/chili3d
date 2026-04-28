@@ -44,6 +44,7 @@ jobs:
               env:
                   SSH_HOST: ${{ secrets.HOST }}
                   SSH_USER: ${{ secrets.USERNAME }}
+                  SSH_PORT: ${{ secrets.SSH_PORT }}
                   SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
               run: |
                   set -ex
@@ -58,7 +59,8 @@ jobs:
 
                   mkdir -p ~/.ssh-ctl && chmod 700 ~/.ssh-ctl
                   CTL="$HOME/.ssh-ctl/deploy.sock"
-                  SSH_OPTS="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=yes -o PasswordAuthentication=no -o PreferredAuthentications=publickey -o LogLevel=ERROR -o ControlMaster=auto -o ControlPath=$CTL -o ControlPersist=10m"
+                  PORT="${SSH_PORT:-22}"
+                  SSH_OPTS="-i $KEY -p $PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=yes -o PasswordAuthentication=no -o PreferredAuthentications=publickey -o LogLevel=ERROR -o ControlMaster=auto -o ControlPath=$CTL -o ControlPersist=10m"
 
                   echo "=== Step 1: Open master connection ==="
                   ssh $SSH_OPTS -o ConnectTimeout=15 -fN "$SSH_USER@$SSH_HOST"
